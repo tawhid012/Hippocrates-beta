@@ -1,0 +1,84 @@
+import "server-only";
+
+import { createHmac, timingSafeEqual, randomUUID } from "crypto";
+import { cookies, headers } from "next/headers";
+
+export const CLIENT_SESSION_COOKIE = "hippocrates_client_session";
+export const CLIENT_SESSION_HEADER = "x-consultation-token";
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+function getSecretKey(): string {
+  return (
+    process.env.ADMIN_SESSION_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    "hippocrates-client-session-signing-secret-secure-key"
+  );
+}
+
+function signSession(id: string): string {
+  return createHmac("sha256", getSecretKey()).update(id).digest("hex");
+}
+
+function verifySignedToken(token: string | null | undefined): string | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+
+  const [id, signature] = parts;
+  if (!id || !signature) return null;
+
+  const expected = signSession(id);
+  const sigBuf = Buffer.from(signature, "hex");
+  const expBuf = Buffer.from(expected, "hex");
+
+  if (sigBuf.length !== expBuf.length) return null;
+  if (!timingSafeEqual(sigBuf, expBuf)) return null;
+
+  return id;
+}
+
+/**
+ * Retrieves the cryptographic client session ID from request cookies or headers.
+ * If none exists, creates a fresh signed session token and sets the cookie.
+ */
+export async function getClientSessionId(): Promise<string> {
+  const headerStore = await headers();
+  const tokenHeader = headerStore.get(CLIENT_SESSION_HEADER);
+  const validatedFromHeader = verifySignedToken(tokenHeader);
+  if (validatedFromHeader) {
+    return validatedFromHeader;
+  }
+
+  const cookieStore = await cookies();
+  const cookieVal = cookieStore.get(CLIENT_SESSION_COOKIE)?.value;
+  const validatedFromCookie = verifySignedToken(cookieVal);
+  if (validatedFromCookie) {
+    return validatedFromCookie;
+  }
+
+  // Issue new cryptographic session token
+  const newId = randomUUID();
+  const newToken = `${newId}.${signSession(newId)}`;
+
+  try {
+    cookieStore.set(CLIENT_SESSION_COOKIE, newToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      path: "/",
+    });
+  } catch {
+    // In read-only header phases, proceed with generated ID
+  }
+
+  return newId;
+}
+
+/**
+ * Validates whether a given owner token matches the current client's session.
+ */
+export function isOwner(recordOwnerToken: string | undefined | null, currentSessionId: string): boolean {
+  if (!recordOwnerToken || !currentSessionId) return false;
+  return recordOwnerToken === currentSessionId;
+}
