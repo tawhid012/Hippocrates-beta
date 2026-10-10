@@ -7,6 +7,8 @@ function isProvider(value: unknown): value is AIProviderId {
   return value === "openai" || value === "gemini";
 }
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   if (!(await isAdminAuthenticated())) return apiError("Unauthorized.", 401);
 

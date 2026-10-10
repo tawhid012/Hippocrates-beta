@@ -2,6 +2,8 @@ import { apiError, ok, parseJsonError } from "@/lib/api/response";
 import { createCase, listCases, type WorkspaceType } from "@/lib/cases/repository";
 import { getClientSessionId } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const sessionId = await getClientSessionId();
