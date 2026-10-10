@@ -1,8 +1,12 @@
 import "server-only";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
 
 export const SUPPORTED_GEMINI_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
   "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash",
@@ -18,6 +22,10 @@ export function getGeminiCandidateModels(): string[] {
   return Array.from(
     new Set([
       preferred,
+      "gemini-3.5-flash",
+      "gemini-flash-latest",
+      "gemini-3.7-flash",
+      "gemini-3.8-flash",
       "gemini-2.5-flash",
       "gemini-2.0-flash",
       "gemini-1.5-flash",
