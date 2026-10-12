@@ -9,6 +9,7 @@ import {
 } from "@/lib/cases/repository";
 import type { AttachmentCategory, ReportAnalysisResult, SafetyEvaluation } from "@/lib/types";
 import { getClientSessionId } from "@/lib/auth/session";
+import { checkRateLimit } from "@/lib/security/rateLimit";
 import {
   parseCaseStateFromMetadata,
   buildCaseStateMetadataUpdate,
@@ -18,6 +19,8 @@ import {
   validateCaseStateIsolation,
   type AegisCaseState,
 } from "@/services/aegis/aegisCaseState";
+
+export const dynamic = "force-dynamic";
 
 function isGreetingMessage(message: string): boolean {
   const clean = message.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
@@ -143,6 +146,11 @@ export async function POST(request: Request) {
 
   try {
     const sessionId = await getClientSessionId();
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || sessionId || "client";
+    const rateCheck = checkRateLimit(`aegis_${clientIp}`, 60, 60_000);
+    if (!rateCheck.success) {
+      return apiError("Too many requests. Please wait a moment before sending another message.", 429);
+    }
     const caseIdStr = typeof body.caseId === "string" && body.caseId ? body.caseId : null;
     const isNewCase = !caseIdStr;
     const finalCaseId = caseIdStr || crypto.randomUUID();

@@ -4,8 +4,8 @@ import {
   extractInstantaneousCaseUpdates,
   determineAssessmentStatusFromResponse,
   validateCaseStateIsolation,
-} from "./src/services/aegis/aegisCaseState.ts";
-import { evaluateSafety } from "./src/lib/aegis/safety.ts";
+} from "../../src/services/aegis/aegisCaseState.ts";
+import { evaluateSafety } from "../../src/lib/aegis/safety.ts";
 
 console.log("=== RUNNING AEGIS ASSESSMENT CONVERGENCE & COMPLETION MASTER SUITE ===");
 

@@ -10,7 +10,7 @@ import {
   buildCaseStateContext,
   stripInternalCaseState,
   EMPTY_CASE_STATE,
-} from "./src/services/aegis/aegisCaseState.ts";
+} from "../../src/services/aegis/aegisCaseState.ts";
 
 console.log("=== RUNNING AEGIS MASTER RESTORATION VALIDATION SUITE ===\n");
 

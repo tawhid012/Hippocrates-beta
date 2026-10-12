@@ -4,6 +4,8 @@ import { saveClinicalDocument } from "@/lib/clinical/repository";
 import type { ModelType } from "@/lib/clinical/types";
 import { getClientSessionId } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const sessionId = await getClientSessionId();

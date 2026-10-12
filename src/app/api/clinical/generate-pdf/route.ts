@@ -5,6 +5,8 @@ import type { NormalizedClinicalSummary } from "@/lib/clinical/types";
 import { getClientSessionId } from "@/lib/auth/session";
 import { getCase } from "@/lib/cases/repository";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const sessionId = await getClientSessionId();

@@ -9,7 +9,7 @@ import {
   createCleanCaseState,
   validateCaseStateIsolation,
   EMPTY_CASE_STATE,
-} from "./src/services/aegis/aegisCaseState.ts";
+} from "../../src/services/aegis/aegisCaseState.ts";
 
 // Consultation isolation logic as implemented in consultationStorage.ts
 function createEmptyConsultation(consultationId, demographics) {

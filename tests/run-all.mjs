@@ -10,9 +10,9 @@ const testSuites = [
   { name: "Admin Authentication & Security Tests", cmd: "node", args: ["--test", "tests/security/auth-admin.test.mjs"] },
   { name: "Session Ownership & Access Control Tests", cmd: "node", args: ["--test", "tests/security/session-ownership.test.mjs"] },
   { name: "Model Configuration & Controlled Fallback Tests", cmd: "node", args: ["--test", "tests/security/model-config.test.mjs"] },
-  { name: "Aegis Clinical State Isolation Suite", cmd: "node", args: ["test-clinical-isolation.mjs"] },
-  { name: "Aegis Assessment Convergence & Emergency Stopping Suite", cmd: "node", args: ["test-assessment-convergence.mjs"] },
-  { name: "Aegis Master Restoration & Progression Suite", cmd: "node", args: ["test-aegis-restoration.mjs"] },
+  { name: "Aegis Clinical State Isolation Suite", cmd: "node", args: ["tests/clinical/test-clinical-isolation.mjs"] },
+  { name: "Aegis Assessment Convergence & Emergency Stopping Suite", cmd: "node", args: ["tests/clinical/test-assessment-convergence.mjs"] },
+  { name: "Aegis Master Restoration & Progression Suite", cmd: "node", args: ["tests/clinical/test-aegis-restoration.mjs"] },
 ];
 
 console.log("================================================================================");

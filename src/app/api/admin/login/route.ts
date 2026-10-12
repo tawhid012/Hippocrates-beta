@@ -1,6 +1,8 @@
 import { apiError, ok, parseJsonError } from "@/lib/api/response";
 import { createAdminSession, verifyAdminCredentials } from "@/lib/auth/admin";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   let body: { username?: string; password?: string };
   try {

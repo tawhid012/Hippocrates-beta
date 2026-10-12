@@ -20,6 +20,8 @@ import {
 } from "@/services/aegis/aegisCaseState";
 import { getClientSessionId } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 function deriveCaseTitle(message: string, fileName?: string) {
   if (fileName) return `Report: ${fileName}`;
   const compact = message.replace(/\s+/g, " ").trim();

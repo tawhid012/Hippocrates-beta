@@ -3,6 +3,8 @@ import { AegisServiceError, askAegisServiceStream } from "@/services/aegis/aegis
 import { evaluateSafety } from "@/lib/aegis/safety";
 import type { ReportAnalysisResult, SafetyEvaluation } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   const t0 = Date.now();
   const contentType = request.headers.get("content-type") || "";

@@ -3,6 +3,9 @@ import "server-only";
 import { getGeminiClient } from "@/lib/gemini/client";
 import { getGeminiCandidateModels } from "@/lib/gemini/config";
 import { buildSanitizedGeminiContents } from "@/lib/gemini/contents";
+import { getAISettings } from "@/lib/ai/settings";
+import { streamOpenAIReply } from "@/lib/ai/openai";
+import type { OracleMessage } from "@/lib/ai/provider";
 import { ORACLE_SYSTEM_PROMPT } from "./oracleSystemPrompt";
 
 export interface OracleMessageInput {
@@ -35,7 +38,8 @@ function buildOracleContents(prompt: string, history: OracleMessageInput[] = [])
 }
 
 /**
- * Streams clinical responses from Oracle using native Gemini streaming with candidate fallback.
+ * Streams clinical responses from Oracle using the active configured provider (OpenAI or Gemini)
+ * with robust fallback across candidate models.
  */
 export async function* askOracleServiceStream(
   userMessage: string,
@@ -47,11 +51,33 @@ export async function* askOracleServiceStream(
     throw new OracleServiceError("Please enter a clinical question or case details.");
   }
 
+  // Check active AI settings for multi-provider support
+  const settings = await getAISettings().catch(() => null);
+  const activeProvider = settings?.activeProvider || "gemini";
+  const openaiKey = apiKey?.startsWith("sk-") ? apiKey : settings?.openaiApiKey;
+
+  if (activeProvider === "openai" && openaiKey) {
+    try {
+      const openAiMessages: OracleMessage[] = [
+        { role: "system", content: ORACLE_SYSTEM_PROMPT },
+        ...history.map((m) => ({ role: m.role as "user" | "assistant" | "system", content: m.content })),
+        { role: "user", content: prompt },
+      ];
+
+      for await (const delta of streamOpenAIReply(openAiMessages, openaiKey)) {
+        yield delta;
+      }
+      return;
+    } catch (openaiErr) {
+      console.warn("[Oracle] OpenAI stream attempt failed, attempting fallback to Gemini:", openaiErr);
+    }
+  }
+
   let ai;
   try {
-    ai = await getGeminiClient(apiKey);
+    ai = await getGeminiClient(activeProvider === "gemini" ? apiKey : undefined);
   } catch (err) {
-    throw new OracleServiceError("Oracle is not configured. Please set the Gemini API key in the Admin Panel.", err);
+    throw new OracleServiceError("Oracle is not configured. Please set the Gemini or OpenAI API key in the Admin Panel.", err);
   }
 
   const models = getGeminiCandidateModels();

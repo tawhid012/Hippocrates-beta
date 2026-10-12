@@ -7,6 +7,9 @@ import {
   renameCase,
 } from "@/lib/cases/repository";
 import { getClientSessionId } from "@/lib/auth/session";
+import { checkRateLimit } from "@/lib/security/rateLimit";
+
+export const dynamic = "force-dynamic";
 
 function deriveCaseTitle(message: string) {
   const compact = message.replace(/\s+/g, " ").trim();
@@ -36,6 +39,11 @@ export async function POST(request: Request) {
 
   try {
     const sessionId = await getClientSessionId();
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || sessionId || "client";
+    const rateCheck = checkRateLimit(`oracle_${clientIp}`, 60, 60_000);
+    if (!rateCheck.success) {
+      return apiError("Too many clinical requests. Please wait a moment before sending another query.", 429);
+    }
     const finalCaseId = caseIdStr || crypto.randomUUID();
     const caseTitle = deriveCaseTitle(message);
 
