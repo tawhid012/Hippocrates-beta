@@ -6,6 +6,7 @@
  */
 
 import type { CaseSummary, CaseWithMessages, ChatRequest, ChatResponse } from "./types";
+import { createBrowserSupabaseClient } from "./supabase/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
@@ -56,6 +57,27 @@ export interface StreamCallbacks {
   onError?: (error: Error) => void;
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const client = createBrowserSupabaseClient();
+    if (client) {
+      const {
+        data: { session },
+      } = await client.auth.getSession();
+      if (session?.access_token) {
+        return {
+          Authorization: `Bearer ${session.access_token}`,
+          "x-user-id": session.user.id,
+        };
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return {};
+}
+
 class HippocratesAPI {
   constructor(private readonly baseUrl: string = API_BASE_URL) {}
 
@@ -64,11 +86,13 @@ class HippocratesAPI {
     const endpoint = isAegis ? `${this.baseUrl}/aegis/chat` : `${this.baseUrl}/oracle/chat`;
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          ...authHeaders,
         },
         body: JSON.stringify({
           message: request.message,
@@ -143,13 +167,17 @@ class HippocratesAPI {
     }
   }
 
-  async sendMessage(request: ChatRequest): Promise<ChatResponse> {
+  async ask(request: ChatRequest): Promise<ChatResponse> {
     const isAegis = request.model.startsWith("aegis") || request.persona === "patient";
     const endpoint = isAegis ? `${this.baseUrl}/aegis/chat` : `${this.baseUrl}/oracle/chat`;
 
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       body: JSON.stringify({
         message: request.message,
         caseId: request.caseId,
@@ -165,18 +193,28 @@ class HippocratesAPI {
   }
 
   async listCases(workspace?: "oracle" | "aegis"): Promise<CaseSummary[]> {
+    const authHeaders = await getAuthHeaders();
     const url = workspace
       ? `${this.baseUrl}/cases?workspace=${encodeURIComponent(workspace)}`
       : `${this.baseUrl}/cases`;
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(url, {
+      cache: "no-store",
+      headers: {
+        ...authHeaders,
+      },
+    });
     const body = await parseResponse<{ cases: CaseSummary[] }>(response);
     return body.cases;
   }
 
   async createCase(title?: string, workspace: "oracle" | "aegis" = "oracle"): Promise<CaseSummary> {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${this.baseUrl}/cases`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       body: JSON.stringify({ title, workspace }),
     });
     const body = await parseResponse<{ case: CaseSummary }>(response);
@@ -184,23 +222,37 @@ class HippocratesAPI {
   }
 
   async getCase(caseId: string): Promise<CaseWithMessages> {
-    const response = await fetch(`${this.baseUrl}/cases/${caseId}`, { cache: "no-store" });
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${this.baseUrl}/cases/${caseId}`, {
+      cache: "no-store",
+      headers: {
+        ...authHeaders,
+      },
+    });
     const body = await parseResponse<{ case: CaseWithMessages }>(response);
     return reviveCase(body.case);
   }
 
   async renameCase(caseId: string, title: string): Promise<void> {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${this.baseUrl}/cases/${caseId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       body: JSON.stringify({ title }),
     });
     await parseResponse<{ success: true }>(response);
   }
 
   async deleteCase(caseId: string): Promise<void> {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${this.baseUrl}/cases/${caseId}`, {
       method: "DELETE",
+      headers: {
+        ...authHeaders,
+      },
     });
     await parseResponse<{ success: true }>(response);
   }

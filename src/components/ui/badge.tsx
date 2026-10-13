@@ -13,6 +13,9 @@ const badgeVariants = cva(
         muted: "bg-muted text-muted-foreground",
         upcoming:
           "bg-hippo-navy/[0.06] text-hippo-navy/60 ring-1 ring-hippo-navy/[0.08]",
+        outline: "border border-slate-200 bg-transparent text-slate-800",
+        secondary: "bg-slate-100 text-slate-800",
+        destructive: "bg-red-600 text-white",
       },
     },
     defaultVariants: {

@@ -61,4 +61,17 @@ body {
   );
 }
 
+/* Mobile Safe Area & iOS Ergonomics */
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+.pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+button, [role="button"] {
+  -webkit-touch-callout: none;
+}
+
+
 

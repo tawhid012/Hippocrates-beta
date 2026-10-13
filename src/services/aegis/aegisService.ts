@@ -3,6 +3,7 @@ import "server-only";
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from "@/lib/gemini/client";
 import { getGeminiCandidateModels } from "@/lib/gemini/config";
+import { streamGeminiWithFastFailover } from "@/lib/gemini/fastStream";
 import { buildSanitizedGeminiContents } from "@/lib/gemini/contents";
 import {
   AEGIS_SYSTEM_PROMPT,
@@ -271,37 +272,13 @@ export function stripInternalCaseState(text: string): string {
   return cleaned;
 }
 
-// Helper to stream with automatic model fallback if a candidate encounters temporary 503/404 on first token
+// Helper to stream with automatic model fallback, 2200ms TTFT fast-failover, and cooldown circuit breaker
 async function* streamWithCandidateFallback(
   ai: GoogleGenAI,
   models: string[],
   params: { contents: unknown; config?: unknown }
 ): AsyncGenerator<{ text?: string }, void, unknown> {
-  let lastError: unknown = null;
-  for (const m of models) {
-    let yieldedAny = false;
-    try {
-      const responseStream = await ai.models.generateContentStream({
-        model: m,
-        contents: params.contents as never,
-        config: params.config as never,
-      });
-
-      for await (const chunk of responseStream) {
-        yieldedAny = true;
-        yield chunk;
-      }
-      return;
-    } catch (err: unknown) {
-      lastError = err;
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Aegis] Model ${m} stream attempt failed (yieldedAny=${yieldedAny}):`, errMsg);
-      if (yieldedAny) {
-        throw err;
-      }
-    }
-  }
-  throw lastError || new Error("All candidate models failed to generate content.");
+  yield* streamGeminiWithFastFailover(ai, models, params, "[Aegis]");
 }
 
 /**

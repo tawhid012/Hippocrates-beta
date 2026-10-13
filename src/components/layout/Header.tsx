@@ -1,12 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import { Menu, Stethoscope, HeartPulse, ArrowRightLeft } from "lucide-react";
+import { Menu, Stethoscope, HeartPulse, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/hooks/useAppContext";
+import { useAuth } from "@/context/AuthContext";
+import { UserMenu } from "@/components/auth/UserMenu";
 
 export function Header() {
-  const { toggleSidebar, persona, switchPersona } = useApp();
+  const { toggleSidebar, persona, selectPersona } = useApp();
+  const { doctorRegistrationNumber } = useAuth();
+
+  const handleLogoClick = () => {
+    if (persona) {
+      selectPersona(persona);
+    }
+  };
 
   return (
     <header className="premium-hairline sticky top-0 z-[70] grid min-h-[68px] grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2 sm:px-4 sm:gap-3 lg:px-6 backdrop-blur-2xl bg-white/60">
@@ -23,9 +32,9 @@ export function Header() {
         </Button>
 
         <button
-          onClick={switchPersona}
+          onClick={handleLogoClick}
           aria-label="Hippocrates home"
-          className="group flex min-w-0 items-center gap-2.5 transition-opacity duration-200 hover:opacity-90 text-left select-none"
+          className="group flex min-w-0 items-center gap-2.5 transition-opacity duration-200 hover:opacity-90 text-left select-none cursor-pointer"
         >
           <div className="relative shrink-0 flex items-center justify-center">
             <Image
@@ -54,6 +63,12 @@ export function Header() {
               <>
                 <Stethoscope className="h-3.5 w-3.5 text-hippo-navy" />
                 <span>Doctor Mode • Oracle</span>
+                {doctorRegistrationNumber && (
+                  <span className="inline-flex items-center gap-1 ml-1 pl-1.5 border-l border-slate-300 text-[10px] text-emerald-700 font-mono font-semibold">
+                    <BadgeCheck className="h-3 w-3 text-emerald-600" />
+                    <span>#{doctorRegistrationNumber}</span>
+                  </span>
+                )}
               </>
             ) : (
               <>
@@ -68,20 +83,9 @@ export function Header() {
       {/* Center — empty spacer */}
       <div aria-hidden />
 
-      {/* Right — Switch Persona button */}
-      <div className="flex items-center gap-2">
-        {persona && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={switchPersona}
-            className="rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-white/80 border border-transparent hover:border-slate-200"
-            title="Switch between Doctor and Patient persona"
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5 text-hippo-blue" />
-            <span className="hidden sm:inline">Switch Role</span>
-          </Button>
-        )}
+      {/* Right — User Account Menu (100% separated) */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <UserMenu />
       </div>
     </header>
   );

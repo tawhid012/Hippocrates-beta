@@ -18,7 +18,7 @@ import {
   validateCaseStateIsolation,
   type AegisCaseState,
 } from "@/services/aegis/aegisCaseState";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -75,8 +75,11 @@ export async function POST(request: Request) {
 
   if (isAegis) {
     try {
-      const sessionId = await getClientSessionId();
-      const existingCase = caseIdStr ? await getCase(caseIdStr, undefined, sessionId) : null;
+      const [sessionId, user] = await Promise.all([
+        getClientSessionId(),
+        getAuthenticatedUser(),
+      ]);
+      const existingCase = caseIdStr ? await getCase(caseIdStr, undefined, sessionId, user?.id) : null;
       const finalCaseId = caseIdStr || crypto.randomUUID();
 
       const history = body.history && Array.isArray(body.history)
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
             : []);
 
       if (!existingCase) {
-        await createCase(deriveCaseTitle(rawMessage, attachment?.fileName), "aegis", undefined, undefined, undefined, finalCaseId, sessionId);
+        await createCase(deriveCaseTitle(rawMessage, attachment?.fileName), "aegis", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
       }
 
       // Load case state strictly scoped to this consultation — no cross-consultation carryover
@@ -108,15 +111,22 @@ export async function POST(request: Request) {
       currentCaseState = extractInstantaneousCaseUpdates(rawMessage, currentCaseState);
 
       const userMessageContent = rawMessage || `Uploaded report: ${attachment?.fileName || "Document"}`;
-      const userMsgPromise = addCaseMessage(finalCaseId, "user", userMessageContent, {
-        attachment: attachment
-          ? {
-              name: attachment.fileName || "Medical Report",
-              type: attachment.mimeType || "application/pdf",
-              size: attachment.fileSize,
-            }
-          : undefined,
-      });
+      const userMsgPromise = addCaseMessage(
+        finalCaseId,
+        "user",
+        userMessageContent,
+        {
+          attachment: attachment
+            ? {
+                name: attachment.fileName || "Medical Report",
+                type: attachment.mimeType || "application/pdf",
+                size: attachment.fileSize,
+              }
+            : undefined,
+        },
+        sessionId,
+        user?.id
+      );
 
       const attachmentsInput = attachment?.fileBase64 && attachment?.mimeType
         ? {
@@ -131,16 +141,23 @@ export async function POST(request: Request) {
         const aegisRes = await askAegisService(rawMessage, history, attachmentsInput, undefined, currentCaseState);
         const cleanReply = stripInternalCaseState(aegisRes.reply);
         const userMessage = await userMsgPromise;
-        const assistantMessage = await addCaseMessage(finalCaseId, "assistant", cleanReply, {
-          reportAnalysis: aegisRes.reportAnalysis,
-        });
+        const assistantMessage = await addCaseMessage(
+          finalCaseId,
+          "assistant",
+          cleanReply,
+          {
+            reportAnalysis: aegisRes.reportAnalysis,
+          },
+          sessionId,
+          user?.id
+        );
 
         if (isNewCase) {
-          await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName));
+          await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName), sessionId, user?.id);
         }
 
         // Persist case state
-        void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState)).catch(() => {});
+        void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState), sessionId, user?.id).catch(() => {});
 
         const statusGate = currentCaseState.assessment_status || currentCaseState.assessment_completeness || "INCOMPLETE";
 
@@ -186,16 +203,23 @@ export async function POST(request: Request) {
             const cleanStreamReply = stripInternalCaseState(fullReply);
 
             const userMessage = await userMsgPromise;
-            const assistantMessage = await addCaseMessage(finalCaseId, "assistant", cleanStreamReply, {
-              reportAnalysis: finalReportAnalysis,
-            });
+            const assistantMessage = await addCaseMessage(
+              finalCaseId,
+              "assistant",
+              cleanStreamReply,
+              {
+                reportAnalysis: finalReportAnalysis,
+              },
+              sessionId,
+              user?.id
+            );
 
             if (isNewCase) {
-              await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName)).catch(() => {});
+              await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName), sessionId, user?.id).catch(() => {});
             }
 
             // Persist updated case state
-            void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState)).catch(() => {});
+            void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState), sessionId, user?.id).catch(() => {});
 
             const statusGate = currentCaseState.assessment_status || currentCaseState.assessment_completeness || "INCOMPLETE";
 
@@ -249,15 +273,16 @@ export async function POST(request: Request) {
     // Oracle
     try {
       const sessionId = await getClientSessionId();
+      const user = await getAuthenticatedUser();
       const history = body.history && Array.isArray(body.history)
         ? body.history.map((m) => ({
             role: (m.role === "assistant" || m.role === "system" ? m.role : "user") as "user" | "assistant" | "system",
             content: typeof m.content === "string" ? m.content : "",
           }))
-        : (caseIdStr ? await getOracleHistory(caseIdStr, sessionId) : []);
+        : (caseIdStr ? await getOracleHistory(caseIdStr, sessionId, user?.id) : []);
       const finalCaseId = caseIdStr || crypto.randomUUID();
       if (isNewCase) {
-        await createCase(deriveCaseTitle(rawMessage), "oracle", undefined, undefined, undefined, finalCaseId, sessionId);
+        await createCase(deriveCaseTitle(rawMessage), "oracle", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
       }
 
       const userMsgPromise = addCaseMessage(finalCaseId, "user", rawMessage);
@@ -268,7 +293,7 @@ export async function POST(request: Request) {
         const assistantMessage = await addCaseMessage(finalCaseId, "assistant", reply);
 
         if (isNewCase) {
-          await renameCase(finalCaseId, deriveCaseTitle(rawMessage));
+          await renameCase(finalCaseId, deriveCaseTitle(rawMessage), sessionId, user?.id);
         }
 
         return ok({
@@ -302,7 +327,7 @@ export async function POST(request: Request) {
             const assistantMessage = await addCaseMessage(finalCaseId, "assistant", fullReply);
 
             if (isNewCase) {
-              await renameCase(finalCaseId, deriveCaseTitle(rawMessage)).catch(() => {});
+              await renameCase(finalCaseId, deriveCaseTitle(rawMessage), sessionId, user?.id).catch(() => {});
             }
 
             controller.enqueue(

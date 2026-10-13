@@ -304,6 +304,40 @@ export interface Database {
           },
         ];
       };
+      profiles: {
+        Row: {
+          id: string;
+          email: string | null;
+          phone: string | null;
+          full_name: string | null;
+          role: "doctor" | "patient";
+          doctor_registration_number: string | null;
+          avatar_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email?: string | null;
+          phone?: string | null;
+          full_name?: string | null;
+          role?: "doctor" | "patient";
+          doctor_registration_number?: string | null;
+          avatar_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          email?: string | null;
+          phone?: string | null;
+          full_name?: string | null;
+          role?: "doctor" | "patient";
+          doctor_registration_number?: string | null;
+          avatar_url?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

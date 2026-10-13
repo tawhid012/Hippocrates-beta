@@ -8,7 +8,7 @@ import {
   updateCaseMetadata,
 } from "@/lib/cases/repository";
 import type { AttachmentCategory, ReportAnalysisResult, SafetyEvaluation } from "@/lib/types";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/security/rateLimit";
 import {
   parseCaseStateFromMetadata,
@@ -72,7 +72,9 @@ function deriveClinicalCaseTitle(
 async function updateCaseStateAsync(
   caseId: string,
   _conversationText: string,
-  currentState: AegisCaseState
+  currentState: AegisCaseState,
+  sessionId?: string,
+  userId?: string
 ): Promise<void> {
   try {
     const updatedState: AegisCaseState = {
@@ -82,7 +84,7 @@ async function updateCaseStateAsync(
       last_updated: new Date().toISOString(),
     };
 
-    await updateCaseMetadata(caseId, buildCaseStateMetadataUpdate(updatedState));
+    await updateCaseMetadata(caseId, buildCaseStateMetadataUpdate(updatedState), sessionId, userId);
   } catch (err) {
     console.warn("[Aegis] Case state metadata update failed (non-critical):", err);
   }
@@ -145,7 +147,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const sessionId = await getClientSessionId();
+    const [sessionId, user] = await Promise.all([
+      getClientSessionId(),
+      getAuthenticatedUser(),
+    ]);
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || sessionId || "client";
     const rateCheck = checkRateLimit(`aegis_${clientIp}`, 60, 60_000);
     if (!rateCheck.success) {
@@ -157,7 +162,7 @@ export async function POST(request: Request) {
 
     // Shared single case fetch for the request (memoized across init, metadata, and history)
     const existingCasePromise = caseIdStr
-      ? getCase(finalCaseId, undefined, sessionId).catch(() => null)
+      ? getCase(finalCaseId, undefined, sessionId, user?.id).catch(() => null)
       : Promise.resolve(null);
 
     // Use client-provided history to skip expensive database queries on the critical path
@@ -197,7 +202,7 @@ export async function POST(request: Request) {
       try {
         const existingCase = await existingCasePromise;
         if (!existingCase) {
-          await createCase(initialTitle, "aegis", "aegis-core", "patient", undefined, finalCaseId, sessionId);
+          await createCase(initialTitle, "aegis", "aegis-core", "patient", undefined, finalCaseId, sessionId, user?.id);
         } else {
           caseTitle = existingCase.title;
         }
@@ -266,10 +271,17 @@ export async function POST(request: Request) {
           content: userMessageContent,
           timestamp: new Date(),
         })
-      : addCaseMessage(finalCaseId, "user", userMessageContent, {
-          attachment: primaryAttachmentObj,
-          attachments: allAttachmentsObj,
-        });
+      : addCaseMessage(
+          finalCaseId,
+          "user",
+          userMessageContent,
+          {
+            attachment: primaryAttachmentObj,
+            attachments: allAttachmentsObj,
+          },
+          sessionId,
+          user?.id
+        );
 
     if (!wantsStream) {
       // Ensure case state is loaded before non-streaming call
@@ -286,17 +298,24 @@ export async function POST(request: Request) {
 
       const cleanReply = stripInternalCaseState(aegisRes.reply);
       const userMessage = await userMsgPromise;
-      const assistantMessage = await addCaseMessage(finalCaseId, "assistant", cleanReply, {
-        reportAnalysis: aegisRes.reportAnalysis,
-        visualAnalysisSummary: aegisRes.visualAnalysisSummary,
-      });
+      const assistantMessage = await addCaseMessage(
+        finalCaseId,
+        "assistant",
+        cleanReply,
+        {
+          reportAnalysis: aegisRes.reportAnalysis,
+          visualAnalysisSummary: aegisRes.visualAnalysisSummary,
+        },
+        sessionId,
+        user?.id
+      );
 
       const clinicalTitle = deriveClinicalCaseTitle(currentCaseState, rawMessage, firstAtt?.fileName);
       if (clinicalTitle && clinicalTitle !== "Patient Health Discussion" && (isNewCase || isPlaceholderTitle(caseTitle))) {
         caseTitle = clinicalTitle;
-        await renameCase(finalCaseId, clinicalTitle).catch(() => {});
+        await renameCase(finalCaseId, clinicalTitle, sessionId, user?.id).catch(() => {});
       } else if (isNewCase) {
-        await renameCase(finalCaseId, caseTitle);
+        await renameCase(finalCaseId, caseTitle, sessionId, user?.id);
       }
 
       const statusGate = determineAssessmentStatusFromResponse(
@@ -309,7 +328,7 @@ export async function POST(request: Request) {
       // Update case state asynchronously (non-blocking)
       const convoText = history.map((m: AegisMessageInput) => `${m.role === "user" ? "PATIENT" : "AEGIS"}: ${m.content}`).join("\n") +
         `\nPATIENT: ${rawMessage}\nAEGIS: ${cleanReply}`;
-      void updateCaseStateAsync(finalCaseId, convoText, currentCaseState);
+      void updateCaseStateAsync(finalCaseId, convoText, currentCaseState, sessionId, user?.id);
 
       return ok({
         reply: cleanReply,
@@ -370,17 +389,24 @@ export async function POST(request: Request) {
 
           await initCasePromise;
           const userMessage = await userMsgPromise;
-          const assistantMessage = await addCaseMessage(finalCaseId, "assistant", cleanStreamReply, {
-            reportAnalysis: finalReportAnalysis,
-            visualAnalysisSummary: finalVisualSummary,
-          });
+          const assistantMessage = await addCaseMessage(
+            finalCaseId,
+            "assistant",
+            cleanStreamReply,
+            {
+              reportAnalysis: finalReportAnalysis,
+              visualAnalysisSummary: finalVisualSummary,
+            },
+            sessionId,
+            user?.id
+          );
 
           const clinicalTitle = deriveClinicalCaseTitle(currentCaseState, rawMessage, firstAtt?.fileName);
           if (clinicalTitle && clinicalTitle !== "Patient Health Discussion" && (isNewCase || isPlaceholderTitle(caseTitle))) {
             caseTitle = clinicalTitle;
-            await renameCase(finalCaseId, clinicalTitle).catch(() => {});
+            await renameCase(finalCaseId, clinicalTitle, sessionId, user?.id).catch(() => {});
           } else if (isNewCase) {
-            await renameCase(finalCaseId, caseTitle).catch(() => {});
+            await renameCase(finalCaseId, caseTitle, sessionId, user?.id).catch(() => {});
           }
 
           const statusGate = determineAssessmentStatusFromResponse(
@@ -393,7 +419,7 @@ export async function POST(request: Request) {
           // Update case state asynchronously after response is done (non-blocking)
           const convoText = history.map((m: AegisMessageInput) => `${m.role === "user" ? "PATIENT" : "AEGIS"}: ${m.content}`).join("\n") +
             `\nPATIENT: ${rawMessage}\nAEGIS: ${cleanStreamReply}`;
-          void updateCaseStateAsync(finalCaseId, convoText, currentCaseState);
+          void updateCaseStateAsync(finalCaseId, convoText, currentCaseState, sessionId, user?.id);
 
           controller.enqueue(
             encoder.encode(

@@ -245,7 +245,9 @@ export function ChatInput({
       onSubmit={handleSubmit}
       className={cn(
         "w-full relative",
-        centered ? "max-w-2xl mx-auto px-2" : "max-w-3xl mx-auto px-3 sm:px-6 pb-4 sm:pb-6 pt-2"
+        centered
+          ? "max-w-2xl mx-auto px-2"
+          : "max-w-3xl mx-auto px-3 sm:px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6 pt-2"
       )}
     >
       {/* Hidden file inputs for Lab Report & Image & Replacement */}
@@ -612,7 +614,7 @@ export function ChatInput({
               disabled={disabled}
               rows={1}
               className={cn(
-                "flex-1 resize-none bg-transparent text-[15px] sm:text-[15.5px] leading-relaxed text-slate-900 tracking-[-0.005em]",
+                "flex-1 resize-none bg-transparent text-base sm:text-[15.5px] leading-relaxed text-slate-900 tracking-[-0.005em]",
                 "placeholder:text-slate-400 placeholder:font-normal",
                 "focus:outline-none",
                 "max-h-[200px] py-2 px-1.5"

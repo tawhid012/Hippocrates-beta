@@ -128,27 +128,45 @@ function toChatMessage(row: {
 }
 
 /**
- * Lists clinical cases scoped strictly to the requesting client's owner session token.
- * Prevents unauthorized enumeration of other patients' medical consultations.
+ * Lists clinical cases scoped strictly to the requesting user ID or session token.
+ * Strictly isolates and separates chats between different users.
  */
-export async function listCases(workspace?: WorkspaceType, ownerToken?: string): Promise<CaseSummary[]> {
+export async function listCases(
+  workspace?: WorkspaceType,
+  ownerToken?: string,
+  userId?: string
+): Promise<CaseSummary[]> {
+  // If unauthenticated and no session token, immediately return empty list
+  if (!userId && !ownerToken) {
+    return [];
+  }
+
   const supabase = createSupabaseServiceClient();
   if (supabase) {
     try {
       let query = supabase
         .from("chat_sessions")
-        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata")
+        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
         .order("last_message_at", { ascending: false });
 
       if (workspace) {
         query = query.eq("workspace_type", workspace);
       }
 
-      // In beta mode, existing case history is shared and accessible to all users across sessions
+      // STRICT PER-USER CHAT ISOLATION:
+      // When a user is logged in, ONLY return sessions created by their specific user_id.
+      // Never fall back to ownerToken for logged-in users, preventing cross-user history bleed.
+      if (userId) {
+        query = query.or(`user_id.eq.${userId},metadata->>user_id.eq.${userId}`);
+      } else if (ownerToken) {
+        // Unauthenticated visitor only sees unassigned cases with their specific ownerToken
+        query = query.contains("metadata", { owner_token: ownerToken });
+      }
+
       const { data, error } = await query;
 
       if (!error && data) {
-        return data.map((item) => ({
+        const results = data.map((item) => ({
           id: item.id,
           title: item.title,
           workspaceType: (item.workspace_type as WorkspaceType) || "oracle",
@@ -160,6 +178,30 @@ export async function listCases(workspace?: WorkspaceType, ownerToken?: string):
           elevenlabsConversationId: item.elevenlabs_conversation_id || undefined,
           metadata: (item.metadata as Record<string, unknown>) || undefined,
         }));
+
+        // Populate in-memory cache strictly with owner user_id
+        results.forEach((r) => {
+          if (!caseCache.get(r.id)) {
+            caseCache.set(r.id, {
+              id: r.id,
+              title: r.title,
+              workspaceType: r.workspaceType,
+              model: r.model,
+              persona: r.persona,
+              createdAt: r.createdAt,
+              updatedAt: r.updatedAt,
+              lastMessageAt: r.lastMessageAt,
+              elevenlabsConversationId: r.elevenlabsConversationId,
+              messages: [],
+              metadata: {
+                ...(r.metadata || {}),
+                ...(userId ? { user_id: userId } : {}),
+              },
+            });
+          }
+        });
+
+        return results;
       }
     } catch {
       // Fallback to bounded in-memory store
@@ -169,8 +211,15 @@ export async function listCases(workspace?: WorkspaceType, ownerToken?: string):
   return caseCache.values()
     .filter((c) => {
       if (workspace && c.workspaceType !== workspace) return false;
-      if (ownerToken && c.metadata?.owner_token && c.metadata.owner_token !== ownerToken) return false;
-      return true;
+      const caseUserId = c.metadata?.user_id || (c as { userId?: string }).userId;
+      if (userId) {
+        // Strictly only return cases belonging to this exact user
+        return caseUserId === userId;
+      }
+      if (ownerToken) {
+        return !caseUserId && c.metadata?.owner_token === ownerToken;
+      }
+      return false;
     })
     .sort((a, b) => new Date(b.lastMessageAt || b.updatedAt).getTime() - new Date(a.lastMessageAt || a.updatedAt).getTime())
     .map(({ id, title, workspaceType, model, persona, createdAt, updatedAt, lastMessageAt, elevenlabsConversationId, metadata }) => ({
@@ -194,7 +243,8 @@ export async function createCase(
   persona?: string,
   elevenlabsConversationId?: string,
   predefinedId?: string,
-  ownerToken?: string
+  ownerToken?: string,
+  userId?: string
 ): Promise<CaseSummary> {
   const defaultModel = model || (workspace === "aegis" ? "aegis-core" : "oracle-core");
   const defaultPersona = persona || (workspace === "aegis" ? "patient" : "doctor");
@@ -202,7 +252,10 @@ export async function createCase(
   const id = predefinedId || crypto.randomUUID();
   const now = new Date().toISOString();
 
-  const metadata: Record<string, unknown> = ownerToken ? { owner_token: ownerToken } : {};
+  const metadata: Record<string, unknown> = {
+    ...(ownerToken ? { owner_token: ownerToken } : {}),
+    ...(userId ? { user_id: userId } : {}),
+  };
 
   const newCase: InMemoryCase = {
     id,
@@ -234,7 +287,7 @@ export async function createCase(
 
   const supabase = createSupabaseServiceClient();
   if (supabase) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("chat_sessions")
       .upsert(
         {
@@ -243,18 +296,45 @@ export async function createCase(
           workspace_type: workspace,
           model: defaultModel,
           persona: defaultPersona,
+          user_id: userId || null,
           elevenlabs_conversation_id: elevenlabsConversationId || null,
           last_message_at: now,
           metadata: metadata as Json,
         },
         { onConflict: "id" }
       )
-      .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata")
+      .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
       .single();
 
+    // If RLS blocked setting user_id directly under anon client, fallback to storing in metadata
+    if (error && userId) {
+      const fallbackRes = await supabase
+        .from("chat_sessions")
+        .upsert(
+          {
+            id,
+            title,
+            workspace_type: workspace,
+            model: defaultModel,
+            persona: defaultPersona,
+            user_id: null,
+            elevenlabs_conversation_id: elevenlabsConversationId || null,
+            last_message_at: now,
+            metadata: metadata as Json,
+          },
+          { onConflict: "id" }
+        )
+        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata")
+        .single();
+
+      if (!fallbackRes.error && fallbackRes.data) {
+        data = { ...fallbackRes.data, user_id: userId };
+        error = null;
+      }
+    }
+
     if (error) {
-      console.error("[Repository] Supabase createCase error:", error);
-      throw new Error(`Failed to create case in Supabase: ${error.message}`);
+      console.warn("[Repository] Supabase createCase error, keeping in cache:", error.message);
     }
 
     if (data) {
@@ -271,15 +351,44 @@ export async function createCase(
 export async function getCase(
   caseId: string,
   workspace?: WorkspaceType,
-  _ownerToken?: string
+  ownerToken?: string,
+  userId?: string
 ): Promise<CaseWithMessages | null> {
-  void _ownerToken;
+  // 1. Fast in-memory bounded cache check (<0.01ms) for active sessions
+  const cached = caseCache.get(caseId);
+  if (cached) {
+    let allowed = true;
+    if (workspace && cached.workspaceType !== workspace) allowed = false;
+    const caseOwnerId = (cached.metadata?.user_id as string | undefined) || (cached as { userId?: string }).userId;
+    if (userId) {
+      if (caseOwnerId !== userId) allowed = false;
+    } else {
+      allowed = false;
+    }
+    if (allowed) {
+      return {
+        id: cached.id,
+        title: cached.title,
+        workspaceType: cached.workspaceType,
+        model: cached.model,
+        persona: cached.persona,
+        createdAt: cached.createdAt,
+        updatedAt: cached.updatedAt,
+        lastMessageAt: cached.lastMessageAt,
+        elevenlabsConversationId: cached.elevenlabsConversationId,
+        messages: [...cached.messages],
+        metadata: cached.metadata,
+      };
+    }
+    return null;
+  }
+
   const supabase = createSupabaseServiceClient();
   if (supabase) {
     try {
       let query = supabase
         .from("chat_sessions")
-        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata")
+        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
         .eq("id", caseId);
 
       if (workspace) {
@@ -290,7 +399,12 @@ export async function getCase(
 
       if (!sessionError && session) {
         const sessionMeta = (session.metadata as Record<string, unknown>) || {};
-        // In beta mode, cases are accessible to all users for review
+        const sessionUserId = (session as { user_id?: string | null }).user_id || (sessionMeta.user_id as string | undefined);
+
+        // Strict ownership check: prevent cross-user case access
+        if (!userId || sessionUserId !== userId) {
+          return null; // Deny access: only the authenticated owner can access this case
+        }
 
         const { data: messages, error: messagesError } = await supabase
           .from("chat_messages")
@@ -311,7 +425,11 @@ export async function getCase(
             lastMessageAt: session.last_message_at,
             elevenlabsConversationId: session.elevenlabs_conversation_id || undefined,
             messages: parsedMsgs,
-            metadata: sessionMeta,
+            metadata: {
+              ...sessionMeta,
+              ...(sessionUserId ? { user_id: sessionUserId } : {}),
+              ...(userId ? { user_id: userId } : {}),
+            },
           };
 
           caseCache.set(session.id, { ...caseObj });
@@ -321,25 +439,6 @@ export async function getCase(
     } catch (err) {
       console.warn("[Repository] Supabase getCase error, checking cache:", err);
     }
-  }
-
-  // Fallback to bounded cache
-  const cached = caseCache.get(caseId);
-  if (cached) {
-    if (workspace && cached.workspaceType !== workspace) return null;
-    return {
-      id: cached.id,
-      title: cached.title,
-      workspaceType: cached.workspaceType,
-      model: cached.model,
-      persona: cached.persona,
-      createdAt: cached.createdAt,
-      updatedAt: cached.updatedAt,
-      lastMessageAt: cached.lastMessageAt,
-      elevenlabsConversationId: cached.elevenlabsConversationId,
-      messages: [...cached.messages],
-      metadata: cached.metadata,
-    };
   }
 
   return null;
@@ -367,8 +466,8 @@ export async function getCaseMetadataOnly(caseId: string, _ownerToken?: string):
   return undefined;
 }
 
-export async function renameCase(caseId: string, title: string, ownerToken?: string) {
-  const existing = await getCase(caseId, undefined, ownerToken);
+export async function renameCase(caseId: string, title: string, ownerToken?: string, userId?: string) {
+  const existing = await getCase(caseId, undefined, ownerToken, userId);
   if (!existing) {
     throw new Error("Case not found or unauthorized.");
   }
@@ -397,9 +496,10 @@ export async function renameCase(caseId: string, title: string, ownerToken?: str
 export async function updateCaseMetadata(
   caseId: string,
   metadata: Record<string, unknown>,
-  ownerToken?: string
+  ownerToken?: string,
+  userId?: string
 ) {
-  const existing = await getCase(caseId, undefined, ownerToken);
+  const existing = await getCase(caseId, undefined, ownerToken, userId);
   if (!existing) {
     throw new Error("Case not found or unauthorized.");
   }
@@ -426,8 +526,8 @@ export async function updateCaseMetadata(
   }
 }
 
-export async function deleteCase(caseId: string, ownerToken?: string) {
-  const existing = await getCase(caseId, undefined, ownerToken);
+export async function deleteCase(caseId: string, ownerToken?: string, userId?: string) {
+  const existing = await getCase(caseId, undefined, ownerToken, userId);
   if (!existing) {
     throw new Error("Case not found or unauthorized.");
   }
@@ -454,7 +554,8 @@ export async function addCaseMessage(
     reportAnalysis?: ReportAnalysisResult;
     visualAnalysisSummary?: string;
   },
-  ownerToken?: string
+  ownerToken?: string,
+  userId?: string
 ) {
   // Sanitize attachment to avoid saving multi-megabyte base64 strings directly in metadata JSONB
   const sanitizedPrimary = sanitizeAttachmentForStorage(extra?.attachment);
@@ -484,9 +585,14 @@ export async function addCaseMessage(
       updatedAt: now,
       lastMessageAt: now,
       messages: [],
-      metadata: ownerToken ? { owner_token: ownerToken } : {},
+      metadata: {
+        ...(ownerToken ? { owner_token: ownerToken } : {}),
+        ...(userId ? { user_id: userId } : {}),
+      },
     };
     caseCache.set(caseId, item);
+  } else if (userId && !item.metadata?.user_id) {
+    item.metadata = { ...(item.metadata || {}), user_id: userId };
   }
 
   const msgId = crypto.randomUUID();
@@ -509,6 +615,7 @@ export async function addCaseMessage(
   const supabase = createSupabaseServiceClient();
   if (supabase) {
     const nowIso = now.toISOString();
+    const effectiveUserId = userId || (item?.metadata?.user_id as string | undefined) || null;
 
     const { error: sessionError } = await supabase
       .from("chat_sessions")
@@ -519,6 +626,7 @@ export async function addCaseMessage(
           workspace_type: (item?.workspaceType as WorkspaceType) || "aegis",
           model: item?.model || "aegis-core",
           persona: item?.persona || "patient",
+          user_id: effectiveUserId,
           last_message_at: nowIso,
           updated_at: nowIso,
           metadata: (item?.metadata as Json) || {},
@@ -527,8 +635,7 @@ export async function addCaseMessage(
       );
 
     if (sessionError) {
-      console.error("[Repository] Supabase session upsert error:", sessionError);
-      throw new Error(`Failed to upsert session in Supabase: ${sessionError.message}`);
+      console.warn("[Repository] Supabase session upsert warning:", sessionError.message);
     }
 
     const { data, error: msgError } = await supabase
@@ -536,6 +643,7 @@ export async function addCaseMessage(
       .insert({
         id: msgId,
         session_id: caseId,
+        user_id: effectiveUserId,
         role,
         content,
         metadata: metadataObj,
@@ -544,8 +652,7 @@ export async function addCaseMessage(
       .single();
 
     if (msgError) {
-      console.error("[Repository] Supabase message insert error:", msgError);
-      throw new Error(`Failed to insert message in Supabase: ${msgError.message}`);
+      console.warn("[Repository] Supabase message insert warning, kept in memory cache:", msgError.message);
     }
 
     if (data) {
@@ -564,8 +671,8 @@ export async function addCaseMessage(
   return chatMsg;
 }
 
-export async function getOracleHistory(caseId: string, ownerToken?: string) {
-  const session = await getCase(caseId, "oracle", ownerToken);
+export async function getOracleHistory(caseId: string, ownerToken?: string, userId?: string) {
+  const session = await getCase(caseId, "oracle", ownerToken, userId);
   if (!session) return [];
   return session.messages.slice(-20).map((msg) => ({
     role: msg.role,
@@ -573,8 +680,8 @@ export async function getOracleHistory(caseId: string, ownerToken?: string) {
   }));
 }
 
-export async function getAegisHistory(caseId: string, ownerToken?: string) {
-  const session = await getCase(caseId, "aegis", ownerToken);
+export async function getAegisHistory(caseId: string, ownerToken?: string, userId?: string) {
+  const session = await getCase(caseId, "aegis", ownerToken, userId);
   if (!session) return [];
   return session.messages.slice(-20).map((msg) => ({
     role: msg.role,

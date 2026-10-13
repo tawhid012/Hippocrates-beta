@@ -1,6 +1,6 @@
 import { apiError, ok, parseJsonError } from "@/lib/api/response";
 import { deleteCase, getCase, renameCase } from "@/lib/cases/repository";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -11,9 +11,10 @@ export const dynamic = "force-dynamic";
 export async function GET(_: Request, context: RouteContext) {
   const { id } = await context.params;
   const sessionId = await getClientSessionId();
+  const user = await getAuthenticatedUser();
 
   try {
-    const caseRecord = await getCase(id, undefined, sessionId);
+    const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) return apiError("Case not found.", 404);
     return ok({ case: caseRecord });
   } catch {
@@ -24,6 +25,7 @@ export async function GET(_: Request, context: RouteContext) {
 export async function PATCH(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const sessionId = await getClientSessionId();
+  const user = await getAuthenticatedUser();
 
   let body: { title?: string };
   try {
@@ -33,10 +35,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   try {
-    const caseRecord = await getCase(id, undefined, sessionId);
+    const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) return apiError("Case not found.", 404);
 
-    await renameCase(id, body.title || "Untitled Case", sessionId);
+    await renameCase(id, body.title || "Untitled Case", sessionId, user?.id);
     return ok({ success: true });
   } catch {
     return apiError("Unable to rename case.", 500);
@@ -46,12 +48,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(_: Request, context: RouteContext) {
   const { id } = await context.params;
   const sessionId = await getClientSessionId();
+  const user = await getAuthenticatedUser();
 
   try {
-    const caseRecord = await getCase(id, undefined, sessionId);
+    const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) return apiError("Case not found.", 404);
 
-    await deleteCase(id, sessionId);
+    await deleteCase(id, sessionId, user?.id);
     return ok({ success: true });
   } catch {
     return apiError("Unable to delete case.", 500);

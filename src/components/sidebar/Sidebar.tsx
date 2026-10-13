@@ -398,7 +398,12 @@ export function Sidebar({
             <SidebarNavItem
               icon={Plus}
               label={isPatient ? "New Health Chat" : "New Case"}
-              onClick={onNewCase}
+              onClick={() => {
+                onNewCase();
+                if (typeof window !== "undefined" && window.innerWidth < 768) {
+                  setSidebarOpen(false);
+                }
+              }}
             />
             <SidebarNavItem
               icon={Search}

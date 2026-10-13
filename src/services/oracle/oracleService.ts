@@ -2,6 +2,7 @@ import "server-only";
 
 import { getGeminiClient } from "@/lib/gemini/client";
 import { getGeminiCandidateModels } from "@/lib/gemini/config";
+import { streamGeminiWithFastFailover } from "@/lib/gemini/fastStream";
 import { buildSanitizedGeminiContents } from "@/lib/gemini/contents";
 import { getAISettings } from "@/lib/ai/settings";
 import { streamOpenAIReply } from "@/lib/ai/openai";
@@ -83,44 +84,33 @@ export async function* askOracleServiceStream(
   const models = getGeminiCandidateModels();
   const contents = buildOracleContents(prompt, history);
 
-  let lastError: unknown = null;
-  let yieldedAny = false;
-
-  for (const model of models) {
-    try {
-      const responseStream = await ai.models.generateContentStream({
-        model,
+  try {
+    for await (const chunk of streamGeminiWithFastFailover(
+      ai,
+      models,
+      {
         contents,
         config: {
           systemInstruction: ORACLE_SYSTEM_PROMPT,
         },
-      });
-
-      for await (const chunk of responseStream) {
-        const text = chunk.text;
-        if (text) {
-          yieldedAny = true;
-          yield text;
-        }
+      },
+      "[Oracle]"
+    )) {
+      if (chunk.text) {
+        yield chunk.text;
       }
-      return;
-    } catch (error: unknown) {
-      lastError = error;
-      if (yieldedAny) {
-        throw error;
-      }
-      console.warn(`[Oracle] Model ${model} failed, trying candidate fallback:`, (error as Error)?.message || error);
     }
+    return;
+  } catch (error: unknown) {
+    const errStr = String((error as Error)?.message || error);
+    if (errStr.includes("API_KEY_INVALID") || errStr.includes("API key not valid") || errStr.includes("MISSING_GEMINI_API_KEY")) {
+      throw new OracleServiceError("Oracle API key configuration error. Please check admin settings.", error);
+    }
+    if (errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
+      throw new OracleServiceError("Oracle is receiving high traffic right now. Please try again shortly.", error);
+    }
+    throw new OracleServiceError("Oracle is temporarily unavailable. Please try again.", error);
   }
-
-  const errStr = String((lastError as Error)?.message || lastError);
-  if (errStr.includes("API_KEY_INVALID") || errStr.includes("API key not valid") || errStr.includes("MISSING_GEMINI_API_KEY")) {
-    throw new OracleServiceError("Oracle API key configuration error. Please check admin settings.", lastError);
-  }
-  if (errStr.includes("RESOURCE_EXHAUSTED") || errStr.includes("quota")) {
-    throw new OracleServiceError("Oracle is receiving high traffic right now. Please try again shortly.", lastError);
-  }
-  throw new OracleServiceError("Oracle is temporarily unavailable. Please try again.", lastError);
 }
 
 /**

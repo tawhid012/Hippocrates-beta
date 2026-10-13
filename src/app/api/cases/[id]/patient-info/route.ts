@@ -1,6 +1,6 @@
 import { apiError, ok, parseJsonError } from "@/lib/api/response";
 import { updateCaseMetadata, getCase } from "@/lib/cases/repository";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, context: RouteContext) {
   const { id } = await context.params;
   const sessionId = await getClientSessionId();
+  const user = await getAuthenticatedUser();
 
   let body: {
     name?: string;
@@ -28,8 +29,8 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   try {
-    // Check if case exists and belongs to current session
-    const caseRecord = await getCase(id, undefined, sessionId);
+    // Check if case exists and belongs to current session or user
+    const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) {
       return apiError("Session not found.", 404);
     }
@@ -43,7 +44,7 @@ export async function POST(request: Request, context: RouteContext) {
       allergies: (body.allergies || "").slice(0, 1000),
     };
 
-    await updateCaseMetadata(id, { patientInfo }, sessionId);
+    await updateCaseMetadata(id, { patientInfo }, sessionId, user?.id);
 
     return ok({ ok: true, patientInfo });
   } catch (err: unknown) {

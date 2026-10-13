@@ -134,7 +134,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 export function useApp() {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error("useApp must be used within AppProvider");
+    return {
+      sidebarOpen: false,
+      setSidebarOpen: () => {},
+      toggleSidebar: () => {},
+      persona: null,
+      setPersona: () => {},
+      selectPersona: (persona: UserPersona) => {
+        if (typeof window !== "undefined") {
+          window.location.href = `/?persona=${persona}`;
+        }
+      },
+      switchPersona: () => {
+        if (typeof window !== "undefined") {
+          window.location.href = "/";
+        }
+      },
+      selectedModel: "oracle-core" as AIModelId,
+      setSelectedModel: () => {},
+      settingsOpen: false,
+      setSettingsOpen: () => {},
+      activeTab: "chat" as const,
+      setActiveTab: () => {},
+    };
   }
   return context;
 }
+

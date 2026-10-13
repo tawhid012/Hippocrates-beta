@@ -2,6 +2,8 @@ import "server-only";
 
 import { createHmac, timingSafeEqual, randomUUID } from "crypto";
 import { cookies, headers } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 
 export const CLIENT_SESSION_COOKIE = "hippocrates_client_session";
 export const CLIENT_SESSION_HEADER = "x-consultation-token";
@@ -82,3 +84,61 @@ export function isOwner(recordOwnerToken: string | undefined | null, currentSess
   if (!recordOwnerToken || !currentSessionId) return false;
   return recordOwnerToken === currentSessionId;
 }
+
+/**
+ * Retrieves the currently authenticated Supabase user from server cookies.
+ */
+export async function getAuthenticatedUser(): Promise<User | null> {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) return null;
+
+    // 1. Check Authorization Bearer header first for robust client API requests
+    const headerStore = await headers();
+    const authHeader = headerStore.get("authorization");
+    if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+      const token = authHeader.substring(7).trim();
+      if (token) {
+        const { createClient } = await import("@supabase/supabase-js");
+        const client = createClient(url, anonKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const {
+          data: { user },
+          error,
+        } = await client.auth.getUser(token);
+        if (!error && user) {
+          return user;
+        }
+      }
+    }
+
+    // 2. Check SSR cookies
+    const cookieStore = await cookies();
+    const supabase = createServerClient(url, anonKey, {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // Read-only server component context
+          }
+        },
+      },
+    });
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  } catch {
+    return null;
+  }
+}
+

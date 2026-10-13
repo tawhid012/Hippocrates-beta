@@ -1,17 +1,25 @@
 import { apiError, ok, parseJsonError } from "@/lib/api/response";
 import { createCase, listCases, type WorkspaceType } from "@/lib/cases/repository";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const sessionId = await getClientSessionId();
+    const [sessionId, user] = await Promise.all([
+      getClientSessionId(),
+      getAuthenticatedUser(),
+    ]);
+
+    if (!user) {
+      return ok({ cases: [] });
+    }
+
     const { searchParams } = new URL(request.url);
     const wsParam = searchParams.get("workspace") as WorkspaceType | null;
     const workspace = wsParam === "aegis" || wsParam === "oracle" ? wsParam : undefined;
 
-    return ok({ cases: await listCases(workspace, sessionId) });
+    return ok({ cases: await listCases(workspace, sessionId, user.id) });
   } catch {
     return apiError("Unable to load cases.", 500);
   }
@@ -33,6 +41,7 @@ export async function POST(request: Request) {
 
   try {
     const sessionId = await getClientSessionId();
+    const user = await getAuthenticatedUser();
     const workspace = body.workspace === "aegis" ? "aegis" : "oracle";
     const caseRecord = await createCase(
       body.title || "Untitled Session",
@@ -41,7 +50,8 @@ export async function POST(request: Request) {
       body.persona,
       body.elevenlabsConversationId,
       undefined,
-      sessionId
+      sessionId,
+      user?.id
     );
     return ok({ case: caseRecord }, { status: 201 });
   } catch {

@@ -7,6 +7,8 @@ import { Menu, X, ArrowRight, Stethoscope, HeartPulse, Sparkles } from "lucide-r
 import { HippocratesLogo } from "@/components/landing/HippocratesLogo";
 import { Button } from "@/components/ui/button";
 import { GetStartedModal } from "@/components/landing/GetStartedModal";
+import { UserMenu } from "@/components/auth/UserMenu";
+import { useAuth } from "@/context/AuthContext";
 
 interface PublicNavbarProps {
   onSelectPersona?: (persona: "doctor" | "patient") => void;
@@ -19,9 +21,28 @@ export function PublicNavbar({
 }: PublicNavbarProps = {}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [getStartedModalOpen, setGetStartedModalOpen] = useState(false);
+  const { user, isPatientAccount } = useAuth();
   const router = useRouter();
 
   const handleOpenLaunch = () => {
+    if (user) {
+      if (isPatientAccount) {
+        if (onSelectPersona) {
+          onSelectPersona("patient");
+        } else {
+          router.push("/?persona=patient");
+        }
+        return;
+      }
+      if (user.user_metadata?.role === "doctor") {
+        if (onSelectPersona) {
+          onSelectPersona("doctor");
+        } else {
+          router.push("/?persona=doctor");
+        }
+        return;
+      }
+    }
     if (onOpenGetStarted) {
       onOpenGetStarted();
     } else {
@@ -74,17 +95,19 @@ export function PublicNavbar({
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
+            <UserMenu />
             <Button
               onClick={handleOpenLaunch}
               className="bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-full px-6 py-2.5 text-sm font-medium shadow-sm hover:shadow transition-all flex items-center gap-2 cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5 text-blue-400" />
-              <span>Launch App</span>
+              <span>{user ? "Launch App" : "Get Started"}</span>
             </Button>
           </div>
 
           {/* Mobile Menu Toggle Button */}
-          <div className="flex md:hidden items-center">
+          <div className="flex md:hidden items-center gap-2">
+            <UserMenu />
             <Button
               variant="ghost"
               size="icon"
@@ -175,7 +198,7 @@ export function PublicNavbar({
                   }}
                   className="w-full bg-[#0f172a] hover:bg-[#1e293b] text-white py-4 rounded-2xl font-medium shadow-sm flex items-center justify-center gap-2"
                 >
-                  <span>Launch Platform App</span>
+                  <span>{user ? "Launch Platform App" : "Get Started"}</span>
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>

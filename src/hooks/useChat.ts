@@ -274,6 +274,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
               setActiveCaseId(data.caseId);
               activeCaseIdRef.current = data.caseId;
               setActiveConsultationId(data.caseId);
+              onCasesChanged?.();
             }
           },
           onDelta: (delta) => {

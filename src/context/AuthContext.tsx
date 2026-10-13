@@ -1,0 +1,704 @@
+"use client";
+
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
+import type { User, Session } from "@supabase/supabase-js";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import type { UserPersona } from "@/lib/types";
+import {
+  normalizePhoneNumber,
+  isValidPhoneNumber,
+  phoneToInternalEmail,
+} from "@/lib/auth/phoneUtils";
+
+export interface SignUpOptions {
+  email?: string;
+  phone?: string;
+  password: string;
+  fullName: string;
+  role: UserPersona;
+  doctorRegistrationNumber?: string;
+}
+
+export interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  isLoading: boolean;
+  role: UserPersona | null;
+  isPatientAccount: boolean;
+  doctorRegistrationNumber: string | null;
+  isDoctorVerified: boolean;
+  authModalOpen: boolean;
+  authModalPersona: UserPersona;
+  authModalMode: "signin" | "signup";
+  doctorOnboardingOpen: boolean;
+  roleRestrictedModalOpen: boolean;
+  openAuthModal: (persona?: UserPersona, mode?: "signin" | "signup") => void;
+  closeAuthModal: () => void;
+  setAuthModalPersona: (persona: UserPersona) => void;
+  setAuthModalMode: (mode: "signin" | "signup") => void;
+  setDoctorOnboardingOpen: (open: boolean) => void;
+  setRoleRestrictedModalOpen: (open: boolean) => void;
+  signInWithGoogle: (persona: UserPersona) => Promise<{ error: Error | null }>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (options: SignUpOptions) => Promise<{ error: Error | null }>;
+  signInWithPhone: (phone: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithPhone: (options: SignUpOptions) => Promise<{ error: Error | null }>;
+  updateDoctorRegistration: (registrationNumber: string) => Promise<{ success: boolean; error?: string }>;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Modal states
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalPersona, setAuthModalPersona] = useState<UserPersona>("patient");
+  const [authModalMode, setAuthModalMode] = useState<"signin" | "signup">("signin");
+  const [doctorOnboardingOpen, setDoctorOnboardingOpen] = useState(false);
+  const [roleRestrictedModalOpen, setRoleRestrictedModalOpen] = useState(false);
+
+  // Doctor registration number
+  const [doctorRegistrationNumber, setDoctorRegistrationNumber] = useState<string | null>(null);
+
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+
+  // Strict role isolation: An account registered as a patient is permanently locked to patient role
+  const isPatientAccount = useMemo(() => {
+    return user?.user_metadata?.role === "patient";
+  }, [user]);
+
+  // Compute active role: strictly locked for patient accounts
+  const role: UserPersona | null = useMemo(() => {
+    if (isPatientAccount) return "patient";
+    if (user?.user_metadata?.role === "doctor") return "doctor";
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("hippocrates_persona");
+      if (saved === "doctor" || saved === "patient") return saved;
+    }
+    return null;
+  }, [user, isPatientAccount]);
+
+  // Doctor is verified if registration number is present and NOT a patient account
+  const isDoctorVerified = useMemo(() => {
+    if (isPatientAccount) return false;
+    return Boolean(doctorRegistrationNumber && doctorRegistrationNumber.trim().length > 0);
+  }, [doctorRegistrationNumber, isPatientAccount]);
+
+  // Synchronize doctor registration number from user metadata or localStorage
+  const syncDoctorRegistration = useCallback((currentUser: User | null) => {
+    if (!currentUser || currentUser.user_metadata?.role === "patient") {
+      setDoctorRegistrationNumber(null);
+      return;
+    }
+
+    const regFromMeta = currentUser.user_metadata?.doctor_registration_number as string | undefined;
+    if (regFromMeta && regFromMeta.trim().length > 0) {
+      setDoctorRegistrationNumber(regFromMeta.trim());
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`hippocrates_dr_reg_${currentUser.id}`, regFromMeta.trim());
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
+
+    // Fallback to local storage if user previously entered it
+    if (typeof window !== "undefined") {
+      try {
+        const localReg = localStorage.getItem(`hippocrates_dr_reg_${currentUser.id}`);
+        if (localReg && localReg.trim().length > 0) {
+          setDoctorRegistrationNumber(localReg.trim());
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    setDoctorRegistrationNumber(null);
+  }, []);
+
+  // WebKit / Safari security fix: Automatically redirect from 0.0.0.0 to localhost
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hostname === "0.0.0.0") {
+      const safeUrl = window.location.href.replace("//0.0.0.0", "//localhost");
+      window.location.replace(safeUrl);
+    }
+  }, []);
+
+  // Check URL params for OAuth role restriction signals
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("role_restriction") === "patient_cannot_be_doctor") {
+        setRoleRestrictedModalOpen(true);
+        params.delete("role_restriction");
+        const cleanQuery = params.toString();
+        const newUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : "");
+        window.history.replaceState({}, "", newUrl);
+      }
+    }
+  }, []);
+
+  // Initial session check and Supabase auth listener
+  useEffect(() => {
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    // Fetch initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!isMounted) return;
+      setSession(initialSession);
+      const currentUser = initialSession?.user ?? null;
+      setUser(currentUser);
+      syncDoctorRegistration(currentUser);
+      setIsLoading(false);
+
+      if (currentUser?.user_metadata?.role === "patient") {
+        // Strict clinical isolation: purge any accidental doctor persona flags
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("hippocrates_pending_role");
+            localStorage.setItem("hippocrates_persona", "patient");
+          } catch {
+            // ignore
+          }
+        }
+      } else if (currentUser) {
+        const targetPersona = (
+          typeof window !== "undefined"
+            ? (new URLSearchParams(window.location.search).get("persona") ||
+                localStorage.getItem("hippocrates_persona") ||
+                localStorage.getItem("hippocrates_pending_role"))
+            : null
+        ) as UserPersona | null;
+
+        const isDr = targetPersona === "doctor" || currentUser.user_metadata?.role === "doctor";
+        const hasReg =
+          currentUser.user_metadata?.doctor_registration_number ||
+          (typeof window !== "undefined" &&
+            localStorage.getItem(`hippocrates_dr_reg_${currentUser.id}`));
+
+        if (isDr && !hasReg) {
+          setDoctorOnboardingOpen(true);
+        }
+      }
+    });
+
+    // Listen for auth state changes (sign in, sign out, token refresh)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!isMounted) return;
+      setSession(newSession);
+      const currentUser = newSession?.user ?? null;
+      setUser(currentUser);
+      syncDoctorRegistration(currentUser);
+      setIsLoading(false);
+
+      if (currentUser?.user_metadata?.role === "patient") {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("hippocrates_pending_role");
+            localStorage.setItem("hippocrates_persona", "patient");
+          } catch {
+            // ignore
+          }
+        }
+      } else if (event === "SIGNED_IN" && currentUser) {
+        const pendingRole = (
+          typeof window !== "undefined"
+            ? localStorage.getItem("hippocrates_pending_role") ||
+              localStorage.getItem("hippocrates_persona")
+            : null
+        ) as UserPersona | null;
+
+        const isDr = pendingRole === "doctor" || currentUser.user_metadata?.role === "doctor";
+        const hasReg =
+          currentUser.user_metadata?.doctor_registration_number ||
+          (typeof window !== "undefined" &&
+            localStorage.getItem(`hippocrates_dr_reg_${currentUser.id}`));
+
+        if (isDr && !hasReg) {
+          setDoctorOnboardingOpen(true);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase, syncDoctorRegistration]);
+
+  const openAuthModal = useCallback(
+    (persona: UserPersona = "patient", mode: "signin" | "signup" = "signin") => {
+      // If patient account attempts to open auth for doctor mode, intercept with restriction modal
+      if (isPatientAccount && persona === "doctor") {
+        setRoleRestrictedModalOpen(true);
+        return;
+      }
+      setAuthModalPersona(persona);
+      setAuthModalMode(mode);
+      setAuthModalOpen(true);
+    },
+    [isPatientAccount]
+  );
+
+  const closeAuthModal = useCallback(() => {
+    setAuthModalOpen(false);
+  }, []);
+
+  // Google OAuth sign-in / sign-up
+  const signInWithGoogle = useCallback(
+    async (persona: UserPersona) => {
+      if (isPatientAccount && persona === "doctor") {
+        setRoleRestrictedModalOpen(true);
+        return {
+          error: new Error("Under clinical isolation governance, an account registered as a patient cannot switch or register as a doctor."),
+        };
+      }
+
+      if (!supabase) {
+        return { error: new Error("Authentication service is currently unavailable.") };
+      }
+
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("hippocrates_pending_role", persona);
+          localStorage.setItem("hippocrates_persona", persona);
+        }
+
+        const rawOrigin = typeof window !== "undefined" ? window.location.origin : "";
+        const origin = (rawOrigin || "http://localhost:3000").replace("0.0.0.0", "localhost");
+        const redirectTo = `${origin}/auth/callback?persona=${persona}&next=${encodeURIComponent("/")}`;
+
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo,
+            queryParams: {
+              access_type: "offline",
+              prompt: "consent",
+            },
+          },
+        });
+
+        if (error) {
+          return { error };
+        }
+
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Failed to initialize Google authentication") };
+      }
+    },
+    [supabase, isPatientAccount]
+  );
+
+  // Email & Password sign-in
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) {
+        return { error: new Error("Authentication service is currently unavailable.") };
+      }
+
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          return { error };
+        }
+
+        if (data.user) {
+          setUser(data.user);
+          setSession(data.session);
+          syncDoctorRegistration(data.user);
+        }
+
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Failed to sign in") };
+      }
+    },
+    [supabase, syncDoctorRegistration]
+  );
+
+  // Email & Password sign-up (including Doctor Registration Number lead sequence)
+  const signUpWithEmail = useCallback(
+    async ({ email, password, fullName, role, doctorRegistrationNumber }: SignUpOptions) => {
+      if (isPatientAccount && role === "doctor") {
+        setRoleRestrictedModalOpen(true);
+        return {
+          error: new Error("Under healthcare compliance regulations, a patient account cannot register as a doctor."),
+        };
+      }
+
+      if (!supabase) {
+        return { error: new Error("Authentication service is currently unavailable.") };
+      }
+
+      if (!email || !email.trim()) {
+        return { error: new Error("Please enter a valid email address.") };
+      }
+
+      try {
+        if (role === "doctor" && (!doctorRegistrationNumber || doctorRegistrationNumber.trim().length === 0)) {
+          return { error: new Error("Doctor Registration Number is mandatory for medical practitioner registration.") };
+        }
+
+        const trimmedReg = doctorRegistrationNumber?.trim() || null;
+
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role,
+              doctor_registration_number: trimmedReg,
+            },
+          },
+        });
+
+        if (error) {
+          return { error };
+        }
+
+        if (data.user) {
+          setUser(data.user);
+          setSession(data.session);
+          if (trimmedReg) {
+            setDoctorRegistrationNumber(trimmedReg);
+            try {
+              localStorage.setItem(`hippocrates_dr_reg_${data.user.id}`, trimmedReg);
+              localStorage.setItem("hippocrates_persona", "doctor");
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Failed to register account") };
+      }
+    },
+    [supabase, isPatientAccount]
+  );
+
+  // Mobile Phone sign-in
+  const signInWithPhone = useCallback(
+    async (phone: string, password: string) => {
+      if (!supabase) {
+        return { error: new Error("Authentication service is currently unavailable.") };
+      }
+
+      if (!phone || !isValidPhoneNumber(phone)) {
+        return { error: new Error("Please enter a valid mobile phone number.") };
+      }
+
+      const cleanPhone = normalizePhoneNumber(phone);
+
+      try {
+        // Step 1: Try native Supabase phone sign-in
+        let result = await supabase.auth.signInWithPassword({
+          phone: cleanPhone,
+          password,
+        });
+
+        // Step 2: Fallback to internal phone alias if phone provider not configured in project dashboard
+        if (result.error) {
+          const aliasEmail = phoneToInternalEmail(cleanPhone);
+          const aliasResult = await supabase.auth.signInWithPassword({
+            email: aliasEmail,
+            password,
+          });
+
+          if (!aliasResult.error) {
+            result = aliasResult;
+          }
+        }
+
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        if (result.data.user) {
+          setUser(result.data.user);
+          setSession(result.data.session);
+          syncDoctorRegistration(result.data.user);
+        }
+
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Failed to sign in with phone number") };
+      }
+    },
+    [supabase, syncDoctorRegistration]
+  );
+
+  // Mobile Phone sign-up (including Doctor Registration Number lead sequence)
+  const signUpWithPhone = useCallback(
+    async ({ phone, password, fullName, role, doctorRegistrationNumber }: SignUpOptions) => {
+      if (isPatientAccount && role === "doctor") {
+        setRoleRestrictedModalOpen(true);
+        return {
+          error: new Error("Under healthcare compliance regulations, a patient account cannot register as a doctor."),
+        };
+      }
+
+      if (!supabase) {
+        return { error: new Error("Authentication service is currently unavailable.") };
+      }
+
+      if (!phone || !isValidPhoneNumber(phone)) {
+        return { error: new Error("Please enter a valid mobile phone number (including country code, e.g. +1... or +91...).") };
+      }
+
+      const cleanPhone = normalizePhoneNumber(phone);
+
+      try {
+        if (role === "doctor" && (!doctorRegistrationNumber || doctorRegistrationNumber.trim().length === 0)) {
+          return { error: new Error("Doctor Registration Number is mandatory for medical practitioner registration.") };
+        }
+
+        const trimmedReg = doctorRegistrationNumber?.trim() || null;
+
+        // Step 1: Try native Supabase phone sign-up
+        let result = await supabase.auth.signUp({
+          phone: cleanPhone,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role,
+              doctor_registration_number: trimmedReg,
+              phone: cleanPhone,
+            },
+          },
+        });
+
+        // Step 2: Fallback to phone alias if phone signups/SMS provider are disabled in dashboard
+        if (
+          result.error &&
+          (result.error.message.toLowerCase().includes("phone signups are disabled") ||
+            result.error.message.toLowerCase().includes("unsupported") ||
+            result.error.message.toLowerCase().includes("sms"))
+        ) {
+          const aliasEmail = phoneToInternalEmail(cleanPhone);
+          result = await supabase.auth.signUp({
+            email: aliasEmail,
+            password,
+            options: {
+              data: {
+                full_name: fullName,
+                role,
+                doctor_registration_number: trimmedReg,
+                phone: cleanPhone,
+              },
+            },
+          });
+        }
+
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        if (result.data.user) {
+          setUser(result.data.user);
+          setSession(result.data.session);
+          if (trimmedReg) {
+            setDoctorRegistrationNumber(trimmedReg);
+            try {
+              localStorage.setItem(`hippocrates_dr_reg_${result.data.user.id}`, trimmedReg);
+              localStorage.setItem("hippocrates_persona", "doctor");
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Failed to register account with phone number") };
+      }
+    },
+    [supabase, isPatientAccount]
+  );
+
+  // Update or provide Doctor Registration Number (e.g. after Google OAuth or modal prompt)
+  const updateDoctorRegistration = useCallback(
+    async (regNumber: string) => {
+      // STRICT IMMUTABILITY: An existing patient account can NEVER register as a doctor
+      if (isPatientAccount) {
+        setRoleRestrictedModalOpen(true);
+        return {
+          success: false,
+          error: "Access Denied: Under healthcare clinical separation rules, an account registered as a Patient cannot register as a medical doctor. Please sign out and sign in with a verified medical practitioner account.",
+        };
+      }
+
+      const trimmed = regNumber.trim();
+      if (!trimmed || trimmed.length < 3) {
+        return { success: false, error: "Please enter a valid Doctor Registration Number (minimum 3 characters)." };
+      }
+
+      try {
+        if (user && supabase) {
+          const { error } = await supabase.auth.updateUser({
+            data: {
+              doctor_registration_number: trimmed,
+              role: "doctor",
+            },
+          });
+
+          if (error) {
+            return { success: false, error: error.message };
+          }
+        }
+
+        // Update local state and storage
+        setDoctorRegistrationNumber(trimmed);
+        if (typeof window !== "undefined") {
+          try {
+            if (user) {
+              localStorage.setItem(`hippocrates_dr_reg_${user.id}`, trimmed);
+            }
+            localStorage.setItem("hippocrates_persona", "doctor");
+            localStorage.removeItem("hippocrates_pending_role");
+          } catch {
+            // ignore
+          }
+        }
+
+        setDoctorOnboardingOpen(false);
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Failed to update registration number",
+        };
+      }
+    },
+    [user, supabase, isPatientAccount]
+  );
+
+  // Sign out
+  const signOut = useCallback(async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setSession(null);
+    setDoctorRegistrationNumber(null);
+    setDoctorOnboardingOpen(false);
+    setRoleRestrictedModalOpen(false);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("hippocrates_pending_role");
+        localStorage.removeItem("hippocrates_persona");
+        localStorage.removeItem("aegis_active_consultation_id");
+        // Clear all stored consultation histories to strictly isolate between users
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (
+            key &&
+            (key.startsWith("aegis_consultation_") ||
+              key.startsWith("hippocrates_dr_reg_"))
+          ) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // ignore
+      }
+    }
+  }, [supabase]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      session,
+      isLoading,
+      role,
+      isPatientAccount,
+      doctorRegistrationNumber,
+      isDoctorVerified,
+      authModalOpen,
+      authModalPersona,
+      authModalMode,
+      doctorOnboardingOpen,
+      roleRestrictedModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      setAuthModalPersona,
+      setAuthModalMode,
+      setDoctorOnboardingOpen,
+      setRoleRestrictedModalOpen,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithPhone,
+      signUpWithPhone,
+      updateDoctorRegistration,
+      signOut,
+    }),
+    [
+      user,
+      session,
+      isLoading,
+      role,
+      isPatientAccount,
+      doctorRegistrationNumber,
+      isDoctorVerified,
+      authModalOpen,
+      authModalPersona,
+      authModalMode,
+      doctorOnboardingOpen,
+      roleRestrictedModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithPhone,
+      signUpWithPhone,
+      updateDoctorRegistration,
+      signOut,
+    ]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}

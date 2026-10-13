@@ -6,7 +6,7 @@ import {
   getOracleHistory,
   renameCase,
 } from "@/lib/cases/repository";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/security/rateLimit";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
 
   try {
     const sessionId = await getClientSessionId();
+    const user = await getAuthenticatedUser();
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || sessionId || "client";
     const rateCheck = checkRateLimit(`oracle_${clientIp}`, 60, 60_000);
     if (!rateCheck.success) {
@@ -55,25 +56,25 @@ export async function POST(request: Request) {
             content: typeof m.content === "string" ? m.content : "",
           }))
         )
-      : (caseIdStr ? getOracleHistory(caseIdStr, sessionId) : Promise.resolve([]));
+      : (caseIdStr ? getOracleHistory(caseIdStr, sessionId, user?.id) : Promise.resolve([]));
 
     if (isNewCase) {
       // Create session in background/cache instantly without blocking SSE start
-      void createCase(caseTitle, "oracle", "oracle-core", "doctor", undefined, finalCaseId, sessionId);
+      void createCase(caseTitle, "oracle", "oracle-core", "doctor", undefined, finalCaseId, sessionId, user?.id);
     }
 
     const history = await historyPromise;
 
     // Start persisting user message in parallel
-    const userMsgPromise = addCaseMessage(finalCaseId, "user", message);
+    const userMsgPromise = addCaseMessage(finalCaseId, "user", message, undefined, sessionId, user?.id);
 
     if (!wantsStream) {
       const reply = await askOracleService(message, history);
       const userMessage = await userMsgPromise;
-      const assistantMessage = await addCaseMessage(finalCaseId, "assistant", reply);
+      const assistantMessage = await addCaseMessage(finalCaseId, "assistant", reply, undefined, sessionId, user?.id);
 
       if (isNewCase) {
-        void renameCase(finalCaseId, caseTitle);
+        void renameCase(finalCaseId, caseTitle, sessionId, user?.id);
       }
 
       return ok({
@@ -109,10 +110,10 @@ export async function POST(request: Request) {
           // Await user message persistence
           const userMessage = await userMsgPromise;
           // Persist assistant message
-          const assistantMessage = await addCaseMessage(finalCaseId, "assistant", fullReply);
+          const assistantMessage = await addCaseMessage(finalCaseId, "assistant", fullReply, undefined, sessionId, user?.id);
 
           if (isNewCase) {
-            void renameCase(finalCaseId, caseTitle);
+            void renameCase(finalCaseId, caseTitle, sessionId, user?.id);
           }
 
           // Send done event with final metadata

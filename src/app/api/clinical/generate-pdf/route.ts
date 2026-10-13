@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generatePdfBlob } from "@/lib/clinical/generatePdf";
 import { getClinicalDocument } from "@/lib/clinical/repository";
 import type { NormalizedClinicalSummary } from "@/lib/clinical/types";
-import { getClientSessionId } from "@/lib/auth/session";
+import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 import { getCase } from "@/lib/cases/repository";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const sessionId = await getClientSessionId();
+    const user = await getAuthenticatedUser();
     const body = await req.json();
     let summary: NormalizedClinicalSummary | null = body.summary || null;
 
@@ -17,9 +18,9 @@ export async function POST(req: NextRequest) {
       summary = await getClinicalDocument(body.documentId, sessionId);
     }
 
-    // If summary was supplied in body, verify that the referenced consultation belongs to the session
+    // If summary was supplied in body, verify that the referenced consultation belongs to the session or user
     if (summary && summary.conversationId && summary.conversationId.length === 36) {
-      const caseRecord = await getCase(summary.conversationId, undefined, sessionId);
+      const caseRecord = await getCase(summary.conversationId, undefined, sessionId, user?.id);
       if (!caseRecord) {
         // Fallback: Check if document was saved under current session
         const stored = await getClinicalDocument(summary.documentId, sessionId);
