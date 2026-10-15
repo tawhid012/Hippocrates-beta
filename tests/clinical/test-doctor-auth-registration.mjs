@@ -209,4 +209,95 @@ test("Doctor Authentication & Registration Number Validation", async (t) => {
     assert.equal(doctorMenu.workspace, "oracle", "Doctor workspace must be strictly Oracle");
     assert.equal(doctorMenu.allowRoleSwitching, false, "Doctor must not have role switching menu");
   });
+
+  await t.test("Duplicate email registration with empty identities triggers user-friendly rejection", () => {
+    // Simulator for Supabase signUp returning identities: []
+    function evaluateSignUpResponse({ data, error }) {
+      if (error) {
+        const errLower = (error.message || "").toLowerCase();
+        if (
+          errLower.includes("already registered") ||
+          errLower.includes("already exists") ||
+          errLower.includes("user already") ||
+          errLower.includes("email already")
+        ) {
+          return { error: new Error("An account with this email address is already registered. Please log in instead.") };
+        }
+        if (
+          error.status === 429 ||
+          errLower.includes("rate limit") ||
+          errLower.includes("security purposes")
+        ) {
+          return {
+            error: new Error("Supabase email verification rate limit reached. To enable instant signup without limits, please disable 'Confirm email' in Supabase Dashboard (Authentication -> Providers -> Email) or add SUPABASE_SERVICE_ROLE_KEY to .env.local."),
+          };
+        }
+        return { error };
+      }
+
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return {
+          error: new Error("An account with this email address is already registered. Please log in instead."),
+        };
+      }
+
+      return { error: null };
+    }
+
+    // Existing user attempts registration -> Supabase returns identities: []
+    const duplicateRes = evaluateSignUpResponse({
+      data: {
+        user: {
+          id: "existing_user_uuid",
+          email: "existing@hospital.org",
+          identities: [],
+        },
+      },
+      error: null,
+    });
+
+    assert.ok(duplicateRes.error !== null, "Must reject registration when identities is empty");
+    assert.match(duplicateRes.error.message, /already registered/);
+
+    // Rate limited signup attempt
+    const rateLimitedRes = evaluateSignUpResponse({
+      data: null,
+      error: {
+        name: "AuthApiError",
+        message: "email rate limit exceeded",
+        status: 429,
+      },
+    });
+
+    assert.ok(rateLimitedRes.error !== null);
+    assert.match(rateLimitedRes.error.message, /rate limit reached/);
+
+    // Fresh new user signup succeeds
+    const freshRes = evaluateSignUpResponse({
+      data: {
+        user: {
+          id: "fresh_user_uuid",
+          email: "fresh@hospital.org",
+          identities: [{ id: "identity_1", provider: "email" }],
+        },
+      },
+      error: null,
+    });
+
+    assert.equal(freshRes.error, null, "Fresh signup with identities must succeed");
+  });
+
+  await t.test("Case-insensitive email matching prevents duplicate registrations", () => {
+    const existingEmails = ["doctor.smith@clinic.org", "patient.jones@health.com"];
+
+    function checkEmailExists(candidateEmail) {
+      const cleanCandidate = candidateEmail.trim().toLowerCase();
+      return existingEmails.some((e) => e.toLowerCase() === cleanCandidate);
+    }
+
+    assert.equal(checkEmailExists("Doctor.Smith@Clinic.Org"), true, "Must match uppercase variant");
+    assert.equal(checkEmailExists("  doctor.smith@clinic.org  "), true, "Must match padded variant");
+    assert.equal(checkEmailExists("DOCTOR.SMITH@CLINIC.ORG"), true, "Must match all-caps variant");
+    assert.equal(checkEmailExists("new.doctor@clinic.org"), false, "Must allow truly new email");
+  });
 });

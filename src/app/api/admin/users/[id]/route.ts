@@ -36,11 +36,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const updates: {
+      id: string;
       doctor_registration_number?: string | null;
       role?: "doctor" | "patient";
       full_name?: string;
       updated_at: string;
     } = {
+      id,
       updated_at: new Date().toISOString(),
     };
 
@@ -68,10 +70,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const { data, error } = await supabase
       .from("profiles")
-      .update(updates)
-      .eq("id", id)
+      .upsert(updates)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       return apiError(error.message, 500);

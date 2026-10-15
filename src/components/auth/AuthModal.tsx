@@ -249,7 +249,19 @@ export function AuthModal() {
           {errorMessage && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <div className="leading-relaxed">{errorMessage}</div>
+              <div className="leading-relaxed flex-1">
+                <div>{errorMessage}</div>
+                {isSignUp && errorMessage.toLowerCase().includes("already") && (
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange("signin")}
+                    className="mt-1.5 inline-flex items-center gap-1 font-semibold text-blue-700 hover:text-blue-900 underline cursor-pointer text-xs"
+                  >
+                    <span>Click here to sign in with this account</span>
+                    <span>&rarr;</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

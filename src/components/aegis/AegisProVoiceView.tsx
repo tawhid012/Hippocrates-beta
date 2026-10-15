@@ -31,6 +31,10 @@ function AegisProVoiceContent() {
   const cachedAgentIdRef = useRef<string>("agent_8001m00as049frhtj6694xbqyhvs");
   const voiceConsultationIdRef = useRef<string>(crypto.randomUUID());
 
+  const [voiceMessages, setVoiceMessages] = useState<
+    Array<{ role: "user" | "assistant"; content: string; event_id?: number; timestamp?: number }>
+  >([]);
+
   // Pre-fetch agent configuration in background on mount so startCall is instantaneous
   useEffect(() => {
     void fetch("/api/aegis-pro/config", { method: "GET", cache: "no-store" })
@@ -68,7 +72,7 @@ function AegisProVoiceContent() {
         // Preserved internally for future summaries
       }
     },
-    onMessage: () => {
+    onMessage: (payload?: { message?: string; role?: string; source?: string; event_id?: number }) => {
       try {
         const id = conversation.getId();
         if (id && !capturedConversationId) {
@@ -76,6 +80,19 @@ function AegisProVoiceContent() {
         }
       } catch {
         // Preserved internally for future summaries
+      }
+
+      if (payload && typeof payload.message === "string" && payload.message.trim()) {
+        const isAi = payload.role === "agent" || payload.source === "ai";
+        const role = isAi ? "assistant" : "user";
+        const content = payload.message.trim();
+
+        setVoiceMessages((prev) => {
+          if (payload.event_id && prev.some((m) => m.event_id === payload.event_id)) {
+            return prev.map((m) => (m.event_id === payload.event_id ? { ...m, content } : m));
+          }
+          return [...prev, { role, content, event_id: payload.event_id, timestamp: Date.now() }];
+        });
       }
     },
     onError: (err: unknown) => {
@@ -147,6 +164,9 @@ function AegisProVoiceContent() {
 
   const handleStartCall = useCallback(async () => {
     setErrorMessage(null);
+    setVoiceMessages([]);
+    setCapturedConversationId(null);
+    voiceConsultationIdRef.current = crypto.randomUUID();
 
     try {
       const targetAgentId = cachedAgentIdRef.current || "agent_8001m00as049frhtj6694xbqyhvs";
@@ -525,8 +545,13 @@ function AegisProVoiceContent() {
         onClose={() => setIsSummaryModalOpen(false)}
         conversationId={capturedConversationId || voiceConsultationIdRef.current}
         model="Aegis Pro"
+        messages={voiceMessages}
+        transcript={
+          voiceMessages.length > 0
+            ? voiceMessages.map((m) => `${m.role === "user" ? "PATIENT" : "AEGIS AI"}: ${m.content}`).join("\n\n")
+            : (hasStartedOnce ? "Patient completed Aegis Pro real-time voice health discussion." : undefined)
+        }
         elevenlabsConversationId={capturedConversationId || undefined}
-        transcript={hasStartedOnce ? "Patient completed Aegis Pro real-time voice health discussion." : undefined}
       />
     </div>
   );

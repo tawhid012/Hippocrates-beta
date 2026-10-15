@@ -80,15 +80,15 @@ export function DocumentGenerationModal({
     });
   }, [conversationId, patientInfo]);
 
-  // When messages are cleared (new consultation), guarantee summary is wiped
+  // When both messages and transcript are cleared (new consultation), guarantee summary is wiped
   useEffect(() => {
-    if (!messages || messages.length === 0) {
+    if ((!messages || messages.length === 0) && !transcript) {
       setSummary(null);
       setState("IDLE");
       setStepIndex(0);
       setErrorMsg(null);
     }
-  }, [messages]);
+  }, [messages, transcript]);
 
   // Sync with prop patientInfo if it gets updated
   useEffect(() => {
@@ -182,6 +182,13 @@ export function DocumentGenerationModal({
       userTurns = 4;
     }
 
+    // For Aegis Pro real-time voice mode: allow summary generation if voice turns or transcript exist
+    if (model === "Aegis Pro") {
+      if ((messages && messages.length > 0) || (transcript && transcript.length > 15)) {
+        return { isAdequate: true, reason: "" };
+      }
+    }
+
     if (userTurns <= 3 && !hasClinicalContent) {
       return {
         isAdequate: false,
@@ -197,7 +204,7 @@ export function DocumentGenerationModal({
     }
 
     return { isAdequate: true, reason: "" };
-  }, [messages, transcript]);
+  }, [messages, transcript, model]);
 
   const isPatientInfoMissing = useCallback(() => {
     return !patientData.name || !patientData.age || !patientData.sex;

@@ -43,15 +43,30 @@ export async function GET(_: Request, context: RouteContext) {
       return apiError("Failed to fetch messages for consultation.", 500);
     }
 
-    // Fetch user profile if user_id present
+    // Fetch user profile if user_id present in column or metadata
     let userProfile = null;
-    if (session.user_id) {
+    const meta = (session.metadata as Record<string, unknown> | null) || {};
+    const effectiveUserId = (session.user_id || meta.user_id) as string | null;
+
+    if (effectiveUserId) {
       const { data: profile } = await supabase
         .from("profiles")
         .select("id, full_name, email, phone, role, doctor_registration_number")
-        .eq("id", session.user_id)
+        .eq("id", effectiveUserId)
         .maybeSingle();
       userProfile = profile;
+    }
+
+    if (!userProfile && meta.patientInfo) {
+      const pInfo = meta.patientInfo as { name?: string; age?: string; sex?: string };
+      userProfile = {
+        id: effectiveUserId || session.id,
+        full_name: pInfo.name || "Patient",
+        email: null,
+        phone: null,
+        role: session.workspace_type === "aegis" ? "patient" : "doctor",
+        doctor_registration_number: null,
+      };
     }
 
     return ok({

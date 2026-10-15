@@ -35,8 +35,14 @@ export async function GET(request: Request) {
       return apiError(error?.message || "Failed to query sessions.", 500);
     }
 
-    // Get user names/emails for all session owners
-    const userIds = Array.from(new Set(sessions.map((s) => s.user_id).filter(Boolean))) as string[];
+    // Get user names/emails for all session owners (from user_id column or metadata.user_id)
+    const userIds = Array.from(
+      new Set(
+        sessions
+          .map((s) => s.user_id || ((s.metadata as Record<string, unknown> | null)?.user_id as string))
+          .filter(Boolean)
+      )
+    ) as string[];
     const userMap: Record<string, { name: string; email: string; role: string }> = {};
 
     if (userIds.length > 0) {
@@ -75,12 +81,15 @@ export async function GET(request: Request) {
 
     let results = sessions.map((s) => {
       const meta = (s.metadata as Record<string, unknown> | null) || {};
-      const caseState = (meta.case_state as Record<string, unknown> | undefined) || {};
+      const caseState = (meta.case_state as Record<string, unknown> | undefined) || (meta.aegisCaseState as Record<string, unknown> | undefined) || {};
       const assessmentStatus = (caseState.assessment_status as string) || (meta.assessment_status as string) || "INCOMPLETE";
       const urgencyLevel = (caseState.urgency_level as string) || (meta.urgency_level as string) || "ROUTINE";
       const hasRedFlag = urgencyLevel === "EMERGENCY" || urgencyLevel === "URGENT";
 
-      const owner = s.user_id ? userMap[s.user_id] : null;
+      const effectiveUserId = (s.user_id || (meta.user_id as string)) || null;
+      const owner = effectiveUserId ? userMap[effectiveUserId] : null;
+      const patientInfo = meta.patientInfo as { name?: string } | undefined;
+      const resolvedName = owner?.name || patientInfo?.name || (effectiveUserId ? "Registered Patient" : "Anonymous Patient");
 
       return {
         id: s.id,
@@ -91,8 +100,8 @@ export async function GET(request: Request) {
         createdAt: s.created_at,
         updatedAt: s.updated_at,
         lastMessageAt: s.last_message_at || s.updated_at,
-        userId: s.user_id,
-        userName: owner?.name || (s.user_id ? "Authenticated User" : "Anonymous"),
+        userId: effectiveUserId,
+        userName: resolvedName,
         userEmail: owner?.email || "",
         userRole: owner?.role || s.persona,
         messageCount: messageCountMap[s.id] || 0,

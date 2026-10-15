@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { NormalizedClinicalSummary, ModelType, MedicationDiscussionItem } from "./types";
 import { validateClinicalDocument } from "./validateClinicalDocument";
-import { getGeminiModelName } from "@/lib/gemini/config";
+import { getGeminiModelName, getGeminiCandidateModels } from "@/lib/gemini/config";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const DEFAULT_DISCLAIMER =
@@ -463,14 +463,7 @@ ${fullText}
 
   let extractedData: Partial<NormalizedClinicalSummary> = {};
   const preferredModel = getGeminiModelName();
-  const modelsToTry = Array.from(new Set([
-    preferredModel,
-    "gemini-3.5-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-3.1-flash-lite",
-    "gemini-3.6-flash",
-    "gemini-3.7-flash",
-  ])).filter(m => m !== "gemini-3.5-flash");
+  const modelsToTry = getGeminiCandidateModels();
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;

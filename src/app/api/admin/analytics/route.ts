@@ -58,7 +58,7 @@ export async function GET() {
       // 2. Fetch session statistics
       const { data: sessions, error: sError } = await supabase
         .from("chat_sessions")
-        .select("id, title, workspace_type, model, created_at, last_message_at, user_id")
+        .select("id, title, workspace_type, model, created_at, last_message_at, user_id, metadata")
         .order("last_message_at", { ascending: false })
         .limit(100);
 
@@ -68,7 +68,34 @@ export async function GET() {
         totalSessions = sessions.length;
         aegisSessions = sessions.filter((s) => s.workspace_type === "aegis").length;
         oracleSessions = sessions.filter((s) => s.workspace_type === "oracle").length;
-        recentSessions = sessions.slice(0, 8);
+        recentSessions = sessions.slice(0, 8).map((s) => ({
+          id: s.id,
+          title: s.title || "Untitled Session",
+          workspace_type: s.workspace_type,
+          model: s.model,
+          last_message_at: s.last_message_at || s.created_at,
+          created_at: s.created_at,
+          user_id: s.user_id || ((s.metadata as Record<string, unknown> | null)?.user_id as string) || null,
+        }));
+
+        // If profiles table has no rows yet, dynamically derive real active users from sessions
+        if (totalUsers === 0) {
+          const uniqueUserMap = new Map<string, { role: string; hasReg: boolean }>();
+          for (const s of sessions) {
+            const meta = s.metadata as Record<string, unknown> | null;
+            const uid = s.user_id || (meta?.user_id as string) || (meta?.owner_token as string);
+            if (uid && !uniqueUserMap.has(uid)) {
+              const role = s.workspace_type === "oracle" ? "doctor" : "patient";
+              uniqueUserMap.set(uid, { role, hasReg: role === "doctor" });
+            }
+          }
+          if (uniqueUserMap.size > 0) {
+            totalUsers = uniqueUserMap.size;
+            patientUsers = Array.from(uniqueUserMap.values()).filter((u) => u.role === "patient").length;
+            doctorUsers = Array.from(uniqueUserMap.values()).filter((u) => u.role === "doctor").length;
+            verifiedDoctors = doctorUsers;
+          }
+        }
       }
 
       // 3. Count total messages

@@ -144,6 +144,10 @@ export function AdminPanel() {
   } | null>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
 
+  // Real-time live data polling state
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(() => new Date());
+
   const activeProviderName = getActiveProviderName(providerStates);
 
   // 1. Load Settings
@@ -192,24 +196,25 @@ export function AdminPanel() {
   }, []);
 
   // 2. Load Analytics
-  const loadAnalytics = useCallback(async () => {
-    setLoadingAnalytics(true);
+  const loadAnalytics = useCallback(async (silent = false) => {
+    if (!silent) setLoadingAnalytics(true);
     try {
       const res = await fetch("/api/admin/analytics", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setAnalytics(data);
+        setLastRefreshedAt(new Date());
       }
     } catch (err) {
       console.warn("Analytics fetch failed:", err);
     } finally {
-      setLoadingAnalytics(false);
+      if (!silent) setLoadingAnalytics(false);
     }
   }, []);
 
   // 3. Load Users
-  const loadUsers = useCallback(async () => {
-    setLoadingUsers(true);
+  const loadUsers = useCallback(async (silent = false) => {
+    if (!silent) setLoadingUsers(true);
     try {
       const params = new URLSearchParams();
       if (userRoleFilter !== "all") params.set("role", userRoleFilter);
@@ -219,17 +224,18 @@ export function AdminPanel() {
       if (res.ok) {
         const json = await res.json();
         setUsers(json.users || []);
+        setLastRefreshedAt(new Date());
       }
     } catch (err) {
       console.warn("Users fetch failed:", err);
     } finally {
-      setLoadingUsers(false);
+      if (!silent) setLoadingUsers(false);
     }
   }, [userRoleFilter, userSearch]);
 
   // 4. Load Cases
-  const loadCases = useCallback(async () => {
-    setLoadingCases(true);
+  const loadCases = useCallback(async (silent = false) => {
+    if (!silent) setLoadingCases(true);
     try {
       const params = new URLSearchParams();
       if (caseWorkspaceFilter !== "all") params.set("workspace", caseWorkspaceFilter);
@@ -239,27 +245,29 @@ export function AdminPanel() {
       if (res.ok) {
         const json = await res.json();
         setCases(json.cases || []);
+        setLastRefreshedAt(new Date());
       }
     } catch (err) {
       console.warn("Cases fetch failed:", err);
     } finally {
-      setLoadingCases(false);
+      if (!silent) setLoadingCases(false);
     }
   }, [caseWorkspaceFilter, caseSearch]);
 
   // 5. Load Health
-  const loadHealth = useCallback(async () => {
-    setLoadingHealth(true);
+  const loadHealth = useCallback(async (silent = false) => {
+    if (!silent) setLoadingHealth(true);
     try {
       const res = await fetch("/api/admin/health", { cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         setHealthData(json);
+        setLastRefreshedAt(new Date());
       }
     } catch (err) {
       console.warn("Health check failed:", err);
     } finally {
-      setLoadingHealth(false);
+      if (!silent) setLoadingHealth(false);
     }
   }, []);
 
@@ -281,6 +289,24 @@ export function AdminPanel() {
       void loadAnalytics();
     }
   }, [activeSection, loadUsers, loadCases, loadHealth, loadAnalytics]);
+
+  // Real-time live background polling (every 5 seconds)
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const interval = setInterval(() => {
+      void loadAnalytics(true);
+      if (activeSection === "physicians" || activeSection === "users") {
+        void loadUsers(true);
+      } else if (activeSection === "cases") {
+        void loadCases(true);
+      } else if (activeSection === "health") {
+        void loadHealth(true);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, activeSection, loadAnalytics, loadUsers, loadCases, loadHealth]);
 
   // Refresh all data
   const handleRefreshAll = () => {
@@ -467,6 +493,27 @@ export function AdminPanel() {
                 </span>
               )}
             </div>
+
+            {/* Live Auto-Refresh Toggle Badge */}
+            <button
+              type="button"
+              onClick={() => setAutoRefresh((prev) => !prev)}
+              title={autoRefresh ? "Real-time live sync active (5s interval). Click to pause." : "Real-time sync paused. Click to enable 5s live polling."}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none",
+                autoRefresh
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100/70"
+                  : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+              )}
+            >
+              <span className="relative flex h-2 w-2">
+                {autoRefresh && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                )}
+                <span className={cn("relative inline-flex rounded-full h-2 w-2", autoRefresh ? "bg-emerald-500" : "bg-slate-400")} />
+              </span>
+              <span>{autoRefresh ? "LIVE 5s" : "PAUSED"}</span>
+            </button>
 
             <Button
               variant="outline"
@@ -1290,7 +1337,7 @@ export function AdminPanel() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={loadHealth}
+                onClick={() => void loadHealth()}
                 disabled={loadingHealth}
                 className="h-9 px-3 text-xs rounded-xl font-semibold gap-1.5 cursor-pointer"
               >

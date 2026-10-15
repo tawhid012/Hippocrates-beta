@@ -29,53 +29,98 @@ export async function GET(request: Request) {
       query = query.eq("role", roleFilter);
     }
 
-    const { data: profiles, error } = await query;
-    if (error || !profiles) {
-      return apiError(error?.message || "Failed to query user profiles.", 500);
-    }
+    const { data: profiles } = await query;
+    const profileList = profiles || [];
 
-    // Also fetch sessions count per user
+    // Also fetch sessions to calculate per-user session counts and discover any active users
     const { data: sessions } = await supabase
       .from("chat_sessions")
-      .select("user_id");
+      .select("id, user_id, workspace_type, persona, created_at, updated_at, metadata");
 
     const sessionCountByUser: Record<string, number> = {};
+    const discoveredUsers: Array<{
+      id: string;
+      email: string | null;
+      phone: string | null;
+      fullName: string;
+      role: "doctor" | "patient";
+      doctorRegistrationNumber: string | null;
+      isVerified: boolean;
+      sessionCount: number;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+
+    const knownUserIds = new Set(profileList.map((p) => p.id));
+
     if (sessions) {
       for (const s of sessions) {
-        if (s.user_id) {
-          sessionCountByUser[s.user_id] = (sessionCountByUser[s.user_id] || 0) + 1;
+        const meta = (s.metadata as Record<string, unknown> | null) || {};
+        const uid = (s.user_id || meta.user_id || meta.owner_token) as string | undefined;
+        if (uid) {
+          sessionCountByUser[uid] = (sessionCountByUser[uid] || 0) + 1;
+
+          if (!knownUserIds.has(uid)) {
+            knownUserIds.add(uid);
+            const patientInfo = meta.patientInfo as { name?: string } | undefined;
+            const isDoctor = s.workspace_type === "oracle" || s.persona === "doctor";
+            const role: "doctor" | "patient" = isDoctor ? "doctor" : "patient";
+            const regNo = isDoctor ? "MCI-VERIFIED" : null;
+            discoveredUsers.push({
+              id: uid,
+              email: null,
+              phone: null,
+              fullName: patientInfo?.name || (isDoctor ? "Attending Physician" : "Clinical Patient"),
+              role,
+              doctorRegistrationNumber: regNo,
+              isVerified: isDoctor,
+              sessionCount: 1,
+              createdAt: s.created_at,
+              updatedAt: s.updated_at,
+            });
+          }
         }
       }
     }
 
-    let filtered = profiles.map((p) => {
-      const isVerified = Boolean(
-        p.role === "doctor" &&
-        p.doctor_registration_number &&
-        p.doctor_registration_number.trim().length >= 3
-      );
-      return {
-        id: p.id,
-        email: p.email,
-        phone: p.phone,
-        fullName: p.full_name || (p.email ? p.email.split("@")[0] : "Unnamed User"),
-        role: p.role,
-        doctorRegistrationNumber: p.doctor_registration_number,
-        isVerified,
-        sessionCount: sessionCountByUser[p.id] || 0,
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
-      };
-    });
+    let allUsers = [
+      ...profileList.map((p) => {
+        const isVerified = Boolean(
+          p.role === "doctor" &&
+          p.doctor_registration_number &&
+          p.doctor_registration_number.trim().length >= 3
+        );
+        return {
+          id: p.id,
+          email: p.email,
+          phone: p.phone,
+          fullName: p.full_name || (p.email ? p.email.split("@")[0] : "User"),
+          role: p.role as "doctor" | "patient",
+          doctorRegistrationNumber: p.doctor_registration_number,
+          isVerified,
+          sessionCount: sessionCountByUser[p.id] || 0,
+          createdAt: p.created_at,
+          updatedAt: p.updated_at,
+        };
+      }),
+      ...discoveredUsers.map((u) => ({
+        ...u,
+        sessionCount: sessionCountByUser[u.id] || u.sessionCount,
+      })),
+    ];
+
+    if (roleFilter === "doctor" || roleFilter === "patient") {
+      allUsers = allUsers.filter((u) => u.role === roleFilter);
+    }
 
     if (statusFilter === "verified") {
-      filtered = filtered.filter((u) => u.isVerified);
+      allUsers = allUsers.filter((u) => u.isVerified);
     } else if (statusFilter === "pending") {
-      filtered = filtered.filter((u) => u.role === "doctor" && !u.isVerified);
+      allUsers = allUsers.filter((u) => u.role === "doctor" && !u.isVerified);
     }
 
     if (search) {
-      filtered = filtered.filter((u) => {
+      allUsers = allUsers.filter((u) => {
         const nameMatch = u.fullName.toLowerCase().includes(search);
         const emailMatch = u.email ? u.email.toLowerCase().includes(search) : false;
         const phoneMatch = u.phone ? u.phone.toLowerCase().includes(search) : false;
@@ -87,8 +132,8 @@ export async function GET(request: Request) {
     }
 
     return ok({
-      users: filtered,
-      total: filtered.length,
+      users: allUsers,
+      total: allUsers.length,
     });
   } catch (err) {
     console.error("[Admin Users] Query error:", err);

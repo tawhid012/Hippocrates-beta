@@ -132,6 +132,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDoctorRegistrationNumber(null);
   }, []);
 
+  // Synchronize authenticated user profile to public.profiles table in real-time
+  const syncUserProfile = useCallback(
+    async (currentUser: User | null) => {
+      if (!currentUser || !supabase) return;
+      try {
+        const meta = currentUser.user_metadata || {};
+        const role = meta.role === "doctor" ? "doctor" : "patient";
+        const regNo = (meta.doctor_registration_number as string | undefined)?.trim() || null;
+        const fullName =
+          (meta.full_name as string | undefined)?.trim() ||
+          (meta.name as string | undefined)?.trim() ||
+          (currentUser.email ? currentUser.email.split("@")[0] : "User");
+        const phone = currentUser.phone || (meta.phone as string | undefined) || null;
+
+        await supabase.from("profiles").upsert(
+          {
+            id: currentUser.id,
+            email: currentUser.email || null,
+            phone,
+            full_name: fullName,
+            role,
+            doctor_registration_number: regNo,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
+      } catch {
+        // Non-blocking background sync
+      }
+    },
+    [supabase]
+  );
+
   // WebKit / Safari security fix: Automatically redirect from 0.0.0.0 to localhost
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hostname === "0.0.0.0") {
@@ -170,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = initialSession?.user ?? null;
       setUser(currentUser);
       syncDoctorRegistration(currentUser);
+      if (currentUser) void syncUserProfile(currentUser);
       setIsLoading(false);
 
       if (currentUser?.user_metadata?.role === "patient") {
@@ -212,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = newSession?.user ?? null;
       setUser(currentUser);
       syncDoctorRegistration(currentUser);
+      if (currentUser) void syncUserProfile(currentUser);
       setIsLoading(false);
 
       if (currentUser?.user_metadata?.role === "patient") {
@@ -287,8 +322,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem("hippocrates_persona", persona);
         }
 
-        const rawOrigin = typeof window !== "undefined" ? window.location.origin : "";
-        const origin = (rawOrigin || "http://localhost:3000").replace("0.0.0.0", "localhost");
+        const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+        const rawOrigin = (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("0.0.0.0"))
+          ? window.location.origin
+          : (configuredSiteUrl || "http://localhost:3000");
+        const origin = rawOrigin.replace(/\/$/, "").replace("0.0.0.0", "localhost");
         const redirectTo = `${origin}/auth/callback?persona=${persona}&next=${encodeURIComponent("/")}`;
 
         const { error } = await supabase.auth.signInWithOAuth({
@@ -335,6 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(data.user);
           setSession(data.session);
           syncDoctorRegistration(data.user);
+          void syncUserProfile(data.user);
         }
 
         return { error: null };
@@ -342,7 +381,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: err instanceof Error ? err : new Error("Failed to sign in") };
       }
     },
-    [supabase, syncDoctorRegistration]
+    [supabase, syncDoctorRegistration, syncUserProfile]
   );
 
   // Email & Password sign-up (including Doctor Registration Number lead sequence)
@@ -369,9 +408,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const trimmedReg = doctorRegistrationNumber?.trim() || null;
+        const cleanEmail = email.trim().toLowerCase();
 
+        // Step 1: Attempt server auto-confirm signup (bypasses email verification if service key configured)
+        try {
+          const apiRes = await fetch("/api/auth/signup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: cleanEmail,
+              password,
+              fullName,
+              role,
+              doctorRegistrationNumber: trimmedReg,
+            }),
+          });
+          const apiData = await apiRes.json().catch(() => ({}));
+          if (apiRes.ok && apiData.ok && apiData.user) {
+            // User auto-confirmed! Immediately sign in to establish active session with zero verification friction
+            const loginRes = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (loginRes.data?.user) {
+              setUser(loginRes.data.user);
+              setSession(loginRes.data.session);
+              if (trimmedReg) {
+                setDoctorRegistrationNumber(trimmedReg);
+                try {
+                  localStorage.setItem(`hippocrates_dr_reg_${loginRes.data.user.id}`, trimmedReg);
+                  localStorage.setItem("hippocrates_persona", "doctor");
+                } catch {}
+              }
+              void syncUserProfile(loginRes.data.user);
+              return { error: null };
+            }
+          } else if (apiData.error && !apiData.fallbackToClient) {
+            return { error: new Error(apiData.error) };
+          }
+        } catch {
+          // Fall through to client signup
+        }
+
+        // Step 2: Client-side signup fallback
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: cleanEmail,
           password,
           options: {
             data: {
@@ -383,7 +464,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (error) {
+          const errLower = (error.message || "").toLowerCase();
+          if (
+            errLower.includes("already registered") ||
+            errLower.includes("already exists") ||
+            errLower.includes("user already") ||
+            errLower.includes("email already")
+          ) {
+            return {
+              error: new Error("An account with this email address is already registered. Please log in instead."),
+            };
+          }
+          if (
+            error.status === 429 ||
+            errLower.includes("rate limit") ||
+            errLower.includes("security purposes")
+          ) {
+            return {
+              error: new Error(
+                "Supabase email verification rate limit reached. To enable instant signup without limits, please disable 'Confirm email' in Supabase Dashboard (Authentication -> Providers -> Email) or add SUPABASE_SERVICE_ROLE_KEY to .env.local."
+              ),
+            };
+          }
           return { error };
+        }
+
+        // Supabase returns an empty identities array when an account with that email already exists
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          return {
+            error: new Error("An account with this email address is already registered. Please log in instead."),
+          };
         }
 
         if (data.user) {
@@ -398,6 +508,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // ignore
             }
           }
+          void syncUserProfile(data.user);
+
+          // If session was null (due to Supabase email confirmation requirement), try immediate sign-in
+          if (!data.session) {
+            const loginAttempt = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (loginAttempt.data?.session) {
+              setSession(loginAttempt.data.session);
+              setUser(loginAttempt.data.user);
+              return { error: null };
+            }
+          }
         }
 
         return { error: null };
@@ -405,7 +529,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: err instanceof Error ? err : new Error("Failed to register account") };
       }
     },
-    [supabase, isPatientAccount]
+    [supabase, isPatientAccount, syncUserProfile]
   );
 
   // Mobile Phone sign-in
@@ -449,6 +573,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(result.data.user);
           setSession(result.data.session);
           syncDoctorRegistration(result.data.user);
+          void syncUserProfile(result.data.user);
         }
 
         return { error: null };
@@ -456,7 +581,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: err instanceof Error ? err : new Error("Failed to sign in with phone number") };
       }
     },
-    [supabase, syncDoctorRegistration]
+    [supabase, syncDoctorRegistration, syncUserProfile]
   );
 
   // Mobile Phone sign-up (including Doctor Registration Number lead sequence)
@@ -523,7 +648,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (result.error) {
+          const errLower = (result.error.message || "").toLowerCase();
+          if (
+            errLower.includes("already registered") ||
+            errLower.includes("already exists") ||
+            errLower.includes("user already") ||
+            errLower.includes("phone already") ||
+            errLower.includes("email already")
+          ) {
+            return {
+              error: new Error("An account with this phone number is already registered. Please log in instead."),
+            };
+          }
           return { error: result.error };
+        }
+
+        // Supabase returns an empty identities array when a user with this phone/alias already exists
+        if (result.data?.user && Array.isArray(result.data.user.identities) && result.data.user.identities.length === 0) {
+          return {
+            error: new Error("An account with this phone number is already registered. Please log in instead."),
+          };
         }
 
         if (result.data.user) {
@@ -538,6 +682,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // ignore
             }
           }
+          void syncUserProfile(result.data.user);
         }
 
         return { error: null };
@@ -545,7 +690,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: err instanceof Error ? err : new Error("Failed to register account with phone number") };
       }
     },
-    [supabase, isPatientAccount]
+    [supabase, isPatientAccount, syncUserProfile]
   );
 
   // Update or provide Doctor Registration Number (e.g. after Google OAuth or modal prompt)
