@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 export function AdminLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,17 +22,19 @@ export function AdminLogin() {
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        setError("Invalid beta admin credentials.");
+        setError(data?.error || "Invalid beta admin credentials.");
         return;
       }
 
       window.location.reload();
     } catch {
-      setError("Unable to sign in right now.");
+      setError("Unable to connect to the authentication service.");
     } finally {
       setLoading(false);
     }
@@ -49,7 +52,7 @@ export function AdminLogin() {
               Admin Access
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Temporary beta login for Oracle configuration.
+              Clinical administration & telemetry console.
             </p>
           </div>
         </div>
@@ -62,27 +65,50 @@ export function AdminLogin() {
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
-              placeholder="Administrator username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="e.g. admin"
+              required
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              placeholder="Administrator password"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Enter admin password"
+                className="pr-10"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
         </div>
 
-        {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+        {error && (
+          <div className="mt-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs">
+            {error}
+          </div>
+        )}
 
         <Button type="submit" className="mt-6 w-full" disabled={loading}>
-          {loading ? "Signing in..." : "Enter Admin"}
+          {loading ? "Verifying..." : "Enter Admin Panel"}
         </Button>
 
         <div className="mt-4 rounded-xl bg-accent/5 p-3 text-[11px] leading-relaxed text-muted-foreground/80 border border-accent/10">
