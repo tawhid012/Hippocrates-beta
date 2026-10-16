@@ -27,13 +27,22 @@ import { LegalModal } from "./LegalModal";
 interface LandingPageProps {
   onSelectPersona: (persona: "doctor" | "patient") => void;
   onLaunchAegisPro?: () => void;
+  onGetStarted?: () => void;
 }
 
-export function LandingPage({ onSelectPersona, onLaunchAegisPro }: LandingPageProps) {
+export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }: LandingPageProps) {
   const [getStartedOpen, setGetStartedOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
+
+  const handleOpenGetStarted = () => {
+    if (onGetStarted) {
+      onGetStarted();
+    } else {
+      setGetStartedOpen(true);
+    }
+  };
 
   const handleLaunchPatient = () => {
     onSelectPersona("patient");
@@ -57,7 +66,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro }: LandingPagePr
         {/* 1. UNIVERSAL NAVIGATION BAR */}
         <PublicNavbar
           onSelectPersona={onSelectPersona}
-          onOpenGetStarted={() => setGetStartedOpen(true)}
+          onOpenGetStarted={handleOpenGetStarted}
         />
 
         {/* 2. UPGRADED HERO SECTION */}
@@ -96,7 +105,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro }: LandingPagePr
                 {/* Single Primary CTA: Get Started */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
                   <Button
-                    onClick={() => setGetStartedOpen(true)}
+                    onClick={handleOpenGetStarted}
                     className="bg-[#0f172a] hover:bg-[#1e293b] text-white px-8 py-6 rounded-2xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group"
                     aria-label="Get Started with Hippocrates"
                   >

@@ -136,22 +136,20 @@ function HomeContent() {
     }
   }, [user, isPatientAccount, persona, selectPersona]);
 
-  // Enforce doctor registration verification and patient role bounds
+  // Enforce doctor registration verification and patient role bounds for authenticated users
   useEffect(() => {
+    if (!user) return; // Do not automatically trigger auth modals for unauthenticated landing page visitors
+
     if (persona === "doctor") {
-      if (!user) {
-        openAuthModal("doctor", "signup");
-      } else if (isPatientAccount) {
+      if (isPatientAccount) {
         // Strict clinical rule: Patient accounts CANNOT access Doctor Mode
         selectPersona("patient");
         setRoleRestrictedModalOpen(true);
       } else if (!isDoctorVerified) {
         setDoctorOnboardingOpen(true);
       }
-    } else if (persona === "patient" && !user) {
-      openAuthModal("patient", "signup");
     }
-  }, [persona, user, isPatientAccount, isDoctorVerified, openAuthModal, selectPersona, setRoleRestrictedModalOpen, setDoctorOnboardingOpen]);
+  }, [persona, user, isPatientAccount, isDoctorVerified, selectPersona, setRoleRestrictedModalOpen, setDoctorOnboardingOpen]);
 
   // Loading state while auth session is initializing
   if (authLoading) {
@@ -174,6 +172,7 @@ function HomeContent() {
         <LandingPage
           onSelectPersona={(p) => openAuthModal(p, "signup")}
           onLaunchAegisPro={() => openAuthModal("patient", "signup")}
+          onGetStarted={() => openAuthModal("patient", "signup")}
         />
         <AuthModal />
         <DoctorOnboardingModal />

@@ -21,7 +21,7 @@ export function PublicNavbar({
 }: PublicNavbarProps = {}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [getStartedModalOpen, setGetStartedModalOpen] = useState(false);
-  const { user, isPatientAccount } = useAuth();
+  const { user, isPatientAccount, openAuthModal } = useAuth();
   const router = useRouter();
 
   const handleOpenLaunch = () => {
@@ -46,7 +46,7 @@ export function PublicNavbar({
     if (onOpenGetStarted) {
       onOpenGetStarted();
     } else {
-      setGetStartedModalOpen(true);
+      openAuthModal("patient", "signup");
     }
   };
 
@@ -94,8 +94,17 @@ export function PublicNavbar({
           </nav>
 
           {/* Desktop CTA */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2.5">
             <UserMenu />
+            {!user && (
+              <Button
+                variant="ghost"
+                onClick={() => openAuthModal("patient", "signin")}
+                className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-full px-4 py-2 text-sm font-medium transition-colors cursor-pointer"
+              >
+                Sign In
+              </Button>
+            )}
             <Button
               onClick={handleOpenLaunch}
               className="bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-full px-6 py-2.5 text-sm font-medium shadow-sm hover:shadow transition-all flex items-center gap-2 cursor-pointer"
@@ -190,7 +199,19 @@ export function PublicNavbar({
                 </button>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col gap-2">
+                {!user && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      openAuthModal("patient", "signin");
+                    }}
+                    className="w-full border-slate-200 hover:bg-slate-50 text-slate-800 py-3 rounded-2xl font-medium"
+                  >
+                    Sign In
+                  </Button>
+                )}
                 <Button
                   onClick={() => {
                     setMobileMenuOpen(false);
