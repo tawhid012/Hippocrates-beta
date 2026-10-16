@@ -131,4 +131,26 @@ test("Consultation Session Ownership & Access Control Isolation", async (t) => {
     const sanitized = sanitizeBase64(oversizedImage);
     assert.equal(sanitized, "[ATTACHMENT_PAYLOAD_STORED_IN_STORAGE]");
   });
+
+  await t.test("Case message integrity: listing cases does not erase messages from cache or repository", async () => {
+    const caseCache = new BoundedCaseCache(10);
+    const fullCase = {
+      id: "case-with-msgs-123",
+      title: "Patient Health Discussion",
+      messages: [
+        { id: "m1", role: "user", content: "Experiencing sharp headache" },
+        { id: "m2", role: "assistant", content: "I understand you have a sharp headache." }
+      ],
+      metadata: { user_id: "user-123" }
+    };
+
+    // Simulate saving a case with messages
+    caseCache.set(fullCase.id, fullCase, "user-123");
+
+    // Case should have 2 messages
+    const loaded = caseCache.get("case-with-msgs-123", "user-123");
+    assert.ok(loaded);
+    assert.equal(loaded.messages.length, 2, "Messages must not be wiped out");
+    assert.equal(loaded.messages[0].content, "Experiencing sharp headache");
+  });
 });

@@ -179,28 +179,6 @@ export async function listCases(
           metadata: (item.metadata as Record<string, unknown>) || undefined,
         }));
 
-        // Populate in-memory cache strictly with owner user_id
-        results.forEach((r) => {
-          if (!caseCache.get(r.id)) {
-            caseCache.set(r.id, {
-              id: r.id,
-              title: r.title,
-              workspaceType: r.workspaceType,
-              model: r.model,
-              persona: r.persona,
-              createdAt: r.createdAt,
-              updatedAt: r.updatedAt,
-              lastMessageAt: r.lastMessageAt,
-              elevenlabsConversationId: r.elevenlabsConversationId,
-              messages: [],
-              metadata: {
-                ...(r.metadata || {}),
-                ...(userId ? { user_id: userId } : {}),
-              },
-            });
-          }
-        });
-
         return results;
       }
     } catch {
@@ -354,14 +332,87 @@ export async function getCase(
   ownerToken?: string,
   userId?: string
 ): Promise<CaseWithMessages | null> {
-  // 1. Fast in-memory bounded cache check (<0.01ms) for active sessions
+  const supabase = createSupabaseServiceClient();
+  if (supabase) {
+    try {
+      let query = supabase
+        .from("chat_sessions")
+        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
+        .eq("id", caseId);
+
+      if (workspace) {
+        query = query.eq("workspace_type", workspace);
+      }
+
+      const { data: session, error: sessionError } = await query.maybeSingle();
+
+      if (sessionError) {
+        console.warn("[Repository] Supabase getCase session query error:", sessionError.message);
+      }
+
+      if (!sessionError && session) {
+        const sessionMeta = (session.metadata && typeof session.metadata === "object" ? session.metadata : {}) as Record<string, unknown>;
+        const sessionUserId = (session as { user_id?: string | null }).user_id || (sessionMeta.user_id as string | undefined) || (sessionMeta.userId as string | undefined);
+
+        // Strict ownership check: prevent cross-user case access
+        let isAuthorized = false;
+        if (userId && sessionUserId) {
+          isAuthorized = sessionUserId.toLowerCase() === userId.toLowerCase();
+        } else if (ownerToken && !sessionUserId) {
+          isAuthorized = sessionMeta.owner_token === ownerToken;
+        }
+
+        if (!isAuthorized) {
+          return null; // Deny access: only the authenticated owner can access this case
+        }
+
+        const { data: messages, error: messagesError } = await supabase
+          .from("chat_messages")
+          .select("id, role, content, created_at, metadata")
+          .eq("session_id", caseId)
+          .order("created_at", { ascending: true });
+
+        if (messagesError) {
+          console.warn("[Repository] Supabase getCase chat_messages error:", messagesError.message);
+        }
+
+        const parsedMsgs = (!messagesError && messages ? messages : []).map(toChatMessage);
+        const caseObj: CaseWithMessages = {
+          id: session.id,
+          title: session.title,
+          workspaceType: (session.workspace_type as WorkspaceType) || "oracle",
+          model: session.model,
+          persona: session.persona,
+          createdAt: session.created_at,
+          updatedAt: session.updated_at,
+          lastMessageAt: session.last_message_at,
+          elevenlabsConversationId: session.elevenlabs_conversation_id || undefined,
+          messages: parsedMsgs,
+          metadata: {
+            ...sessionMeta,
+            ...(sessionUserId ? { user_id: sessionUserId } : {}),
+            ...(userId ? { user_id: userId } : {}),
+          },
+        };
+
+        caseCache.set(session.id, { ...caseObj });
+        return caseObj;
+      }
+    } catch (err) {
+      console.warn("[Repository] Supabase getCase error, falling back to cache:", err);
+    }
+  }
+
+  // Fallback to bounded in-memory cache if Supabase is unavailable or in offline mode
   const cached = caseCache.get(caseId);
   if (cached) {
     let allowed = true;
     if (workspace && cached.workspaceType !== workspace) allowed = false;
     const caseOwnerId = (cached.metadata?.user_id as string | undefined) || (cached as { userId?: string }).userId;
     if (userId) {
-      if (caseOwnerId !== userId) allowed = false;
+      if (!caseOwnerId || caseOwnerId.toLowerCase() !== userId.toLowerCase()) allowed = false;
+    } else if (ownerToken) {
+      if (caseOwnerId || cached.metadata?.owner_token !== ownerToken) allowed = false;
     } else {
       allowed = false;
     }
@@ -381,64 +432,6 @@ export async function getCase(
       };
     }
     return null;
-  }
-
-  const supabase = createSupabaseServiceClient();
-  if (supabase) {
-    try {
-      let query = supabase
-        .from("chat_sessions")
-        .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
-        .eq("id", caseId);
-
-      if (workspace) {
-        query = query.eq("workspace_type", workspace);
-      }
-
-      const { data: session, error: sessionError } = await query.maybeSingle();
-
-      if (!sessionError && session) {
-        const sessionMeta = (session.metadata as Record<string, unknown>) || {};
-        const sessionUserId = (session as { user_id?: string | null }).user_id || (sessionMeta.user_id as string | undefined);
-
-        // Strict ownership check: prevent cross-user case access
-        if (!userId || sessionUserId !== userId) {
-          return null; // Deny access: only the authenticated owner can access this case
-        }
-
-        const { data: messages, error: messagesError } = await supabase
-          .from("chat_messages")
-          .select("id, role, content, created_at, metadata")
-          .eq("session_id", caseId)
-          .order("created_at", { ascending: true });
-
-        if (!messagesError) {
-          const parsedMsgs = (messages ?? []).map(toChatMessage);
-          const caseObj: CaseWithMessages = {
-            id: session.id,
-            title: session.title,
-            workspaceType: (session.workspace_type as WorkspaceType) || "oracle",
-            model: session.model,
-            persona: session.persona,
-            createdAt: session.created_at,
-            updatedAt: session.updated_at,
-            lastMessageAt: session.last_message_at,
-            elevenlabsConversationId: session.elevenlabs_conversation_id || undefined,
-            messages: parsedMsgs,
-            metadata: {
-              ...sessionMeta,
-              ...(sessionUserId ? { user_id: sessionUserId } : {}),
-              ...(userId ? { user_id: userId } : {}),
-            },
-          };
-
-          caseCache.set(session.id, { ...caseObj });
-          return caseObj;
-        }
-      }
-    } catch (err) {
-      console.warn("[Repository] Supabase getCase error, checking cache:", err);
-    }
   }
 
   return null;

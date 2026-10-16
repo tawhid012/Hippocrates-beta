@@ -17,7 +17,8 @@ export async function GET(_: Request, context: RouteContext) {
     const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) return apiError("Case not found.", 404);
     return ok({ case: caseRecord });
-  } catch {
+  } catch (err) {
+    console.error(`[GET /api/cases/${id}] Error loading case:`, err);
     return apiError("Unable to load case.", 500);
   }
 }

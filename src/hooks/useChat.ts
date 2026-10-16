@@ -563,12 +563,15 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
           createdAt: caseRecord.createdAt,
           updatedAt: caseRecord.updatedAt,
           messages: taggedMessages,
-          caseState: createCleanCaseState(caseId),
+          caseState: caseStateMeta
+            ? { ...createCleanCaseState(caseId), ...caseStateMeta }
+            : createCleanCaseState(caseId),
           clinicalSummary: null,
           doctorNote: null,
         });
       }
-    } catch {
+    } catch (err) {
+      console.warn("[useChat] Could not load case from API, checking local consultation state:", err);
       // Offline / database paused fallback: try strictly this consultation's local storage
       const local = loadConsultationState(caseId);
       if (local && local.consultationId === caseId) {

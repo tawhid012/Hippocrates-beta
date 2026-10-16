@@ -41,11 +41,12 @@ function reviveChatResponse(response: ChatResponse): ChatResponse {
 }
 
 function reviveCase(caseRecord: CaseWithMessages): CaseWithMessages {
+  if (!caseRecord) return caseRecord;
   return {
     ...caseRecord,
-    messages: caseRecord.messages.map((message) => ({
+    messages: (caseRecord.messages || []).map((message) => ({
       ...message,
-      timestamp: new Date(message.timestamp),
+      timestamp: message.timestamp ? new Date(message.timestamp) : new Date(),
     })),
   };
 }
