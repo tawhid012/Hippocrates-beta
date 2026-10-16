@@ -10,30 +10,86 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const next = requestUrl.searchParams.get("next") || "/";
   const persona = requestUrl.searchParams.get("persona");
+  const redirectOriginParam = requestUrl.searchParams.get("redirect_origin");
 
-  // Production origin detection:
-  // 1. Explicitly configured public URL environment variable
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""));
+  // Production origin detection strategy:
+  // 1. Explicitly configured public URL environment variable (Vercel, Netlify, Render, Railway, Custom)
+  const envUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.URL || // Netlify primary site URL
+    process.env.DEPLOY_PRIME_URL || // Netlify branch deploy URL
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+    process.env.RENDER_EXTERNAL_URL || // Render
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
+
   let safeOrigin = envUrl ? envUrl.replace(/\/$/, "") : "";
 
-  if (!safeOrigin) {
-    const rawHost = request.headers.get("x-forwarded-host") || request.headers.get("host") || requestUrl.host;
-    // If x-forwarded-host contains multiple comma-separated proxy hosts, use the first one
-    const host = rawHost.split(",")[0].trim();
-    const rawProto = request.headers.get("x-forwarded-proto") || requestUrl.protocol.replace(":", "");
-    const proto = rawProto.split(",")[0].trim();
-    if (host && !host.includes("0.0.0.0")) {
-      safeOrigin = `${proto}://${host}`;
+  // 2. Validate redirect_origin param passed explicitly from client (window.location.origin)
+  if (!safeOrigin && redirectOriginParam) {
+    try {
+      const parsedOrigin = new URL(redirectOriginParam);
+      if (
+        (parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:") &&
+        parsedOrigin.hostname !== "0.0.0.0"
+      ) {
+        safeOrigin = parsedOrigin.origin;
+      }
+    } catch {
+      // Invalid URL in query param, proceed to headers detection
     }
   }
 
-  // WebKit / Safari security fix:
-  // WebKit strictly blocks 0.0.0.0 as a restricted port (WebKitErrorDomain: 103).
-  // Always normalize development origins to http://localhost:3000 or production domain.
+  // 3. Inspect request proxy headers (x-forwarded-host, host, referer)
+  if (!safeOrigin) {
+    const rawForwardedHost = request.headers.get("x-forwarded-host");
+    const rawHost = rawForwardedHost || request.headers.get("host") || requestUrl.host;
+    const host = rawHost ? rawHost.split(",")[0].trim() : "";
+    const rawProto = request.headers.get("x-forwarded-proto") || (requestUrl.protocol ? requestUrl.protocol.replace(":", "") : "https");
+    const proto = rawProto.split(",")[0].trim();
+
+    if (host && !host.includes("0.0.0.0")) {
+      // In production mode, if host is localhost/127.0.0.1 (often due to internal standalone container routing),
+      // check if referer header contains the real remote domain
+      const isLocalHost = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+      if (isLocalHost && process.env.NODE_ENV === "production") {
+        const referer = request.headers.get("referer");
+        if (referer) {
+          try {
+            const refererUrl = new URL(referer);
+            if (!refererUrl.hostname.includes("localhost") && !refererUrl.hostname.includes("127.0.0.1")) {
+              safeOrigin = refererUrl.origin;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (!safeOrigin) {
+        safeOrigin = `${proto}://${host}`;
+      }
+    }
+  }
+
+  // 4. WebKit / Safari security fix & development fallback
   if (!safeOrigin || safeOrigin.includes("0.0.0.0") || !safeOrigin.startsWith("http")) {
     safeOrigin = process.env.NODE_ENV === "production" ? requestUrl.origin : "http://localhost:3000";
   }
   safeOrigin = safeOrigin.replace("0.0.0.0", "localhost");
+
+  // 5. If safeOrigin is still localhost in production, check redirectOriginParam or requestUrl.origin
+  if (
+    process.env.NODE_ENV === "production" &&
+    (safeOrigin.includes("localhost") || safeOrigin.includes("127.0.0.1"))
+  ) {
+    if (redirectOriginParam && !redirectOriginParam.includes("localhost") && !redirectOriginParam.includes("127.0.0.1")) {
+      safeOrigin = redirectOriginParam;
+    } else if (requestUrl.hostname !== "localhost" && requestUrl.hostname !== "127.0.0.1") {
+      safeOrigin = requestUrl.origin;
+    }
+  }
 
   const buildSafeRedirectUrl = (pathOrUrl: string, base: string) => {
     let url: URL;
@@ -45,7 +101,7 @@ export async function GET(request: NextRequest) {
         url = new URL(pathOrUrl.replace("0.0.0.0", "localhost"), base);
         // CRITICAL DEPLOYMENT FIX:
         // If the redirect URL points to localhost/127.0.0.1/0.0.0.0, but the current base
-        // is a remote/production domain (e.g. deployed to Vercel/custom domain),
+        // is a remote/production domain (e.g. deployed to Vercel/Netlify/custom domain),
         // rewrite the hostname, port, and protocol to match the production domain!
         if (
           (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "0.0.0.0") &&
@@ -64,6 +120,7 @@ export async function GET(request: NextRequest) {
     if (url.hostname === "0.0.0.0") {
       url.hostname = "localhost";
     }
+    url.searchParams.delete("redirect_origin");
     return url;
   };
 

@@ -327,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? window.location.origin
           : (configuredSiteUrl || "http://localhost:3000");
         const origin = rawOrigin.replace(/\/$/, "").replace("0.0.0.0", "localhost");
-        const redirectTo = `${origin}/auth/callback?persona=${persona}&next=${encodeURIComponent("/")}`;
+        const redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
 
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
