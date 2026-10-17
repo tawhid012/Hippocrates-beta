@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { DoctorHandoffModal } from "./DoctorHandoffModal";
 import { optimizeMedicalImageForUpload } from "@/lib/image-optimizer";
 import type { ReportAnalysisResult, SafetyEvaluation, LabResultStatus, ReportMetrics } from "@/lib/types";
+import { resolveApiUrl } from "@/lib/api-client";
 
 export function ReportAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
@@ -106,7 +107,7 @@ export function ReportAnalyzer() {
 
       setActiveStage("Extracting laboratory findings via Gemini Multimodal...");
 
-      const response = await fetch("/api/aegis/report", {
+      const response = await fetch(resolveApiUrl("/api/aegis/report"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

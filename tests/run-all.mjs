@@ -14,6 +14,7 @@ const testSuites = [
   { name: "Aegis Clinical State Isolation Suite", cmd: "node", args: ["tests/clinical/test-clinical-isolation.mjs"] },
   { name: "Aegis Assessment Convergence & Emergency Stopping Suite", cmd: "node", args: ["tests/clinical/test-assessment-convergence.mjs"] },
   { name: "Aegis Master Restoration & Progression Suite", cmd: "node", args: ["tests/clinical/test-aegis-restoration.mjs"] },
+  { name: "Web Audio API High-Pass Filtering & Noise Hum Suite", cmd: "node", args: ["--test", "tests/audio/audio-filtering.test.mjs"] },
 ];
 
 console.log("================================================================================");

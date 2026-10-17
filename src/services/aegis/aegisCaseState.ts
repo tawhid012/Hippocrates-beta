@@ -1134,6 +1134,9 @@ export function buildCaseStateMetadataUpdate(
   state: AegisCaseState
 ): Record<string, unknown> {
   return {
+    assessment_status: state.assessment_status,
+    urgency_level: state.urgency_level,
+    case_state: state,
     aegisCaseState: {
       ...state,
       last_updated: new Date().toISOString(),
@@ -1237,7 +1240,20 @@ export function determineAssessmentStatusFromResponse(
     lower.includes("tension") ||
     lower.includes("thyroid") ||
     lower.includes("anemia") ||
-    lower.includes("iron deficiency");
+    lower.includes("iron deficiency") ||
+    lower.includes("likely") ||
+    lower.includes("most likely") ||
+    lower.includes("suggests") ||
+    lower.includes("indicates") ||
+    lower.includes("diagnosis") ||
+    lower.includes("provisional") ||
+    lower.includes("assessment") ||
+    lower.includes("migraine") ||
+    lower.includes("infection") ||
+    lower.includes("condition") ||
+    lower.includes("cause") ||
+    lower.includes("causes") ||
+    lower.includes("pointing to");
 
   // Check if the reply delivers clinical guidance / next steps
   const hasGuidanceOrNextSteps =
@@ -1253,18 +1269,24 @@ export function determineAssessmentStatusFromResponse(
     lower.includes("safety-net") ||
     lower.includes("watch for") ||
     lower.includes("blood work") ||
-    lower.includes("blood tests");
-
-  const endsWithQuestion = /\?\s*$/.test(text);
-
-  if (hasClinicalConsiderations && hasGuidanceOrNextSteps && !endsWithQuestion) {
-    if (lower.includes("health summary") || lower.includes("summary") || lower.includes("feel free to ask") || lower.includes("let me know if")) {
-      return "COMPLETE";
-    }
-    return "SUFFICIENT_FOR_PROVISIONAL_ASSESSMENT";
-  }
+    lower.includes("blood tests") ||
+    lower.includes("consult") ||
+    lower.includes("advice") ||
+    lower.includes("treatment") ||
+    lower.includes("rest") ||
+    lower.includes("hydration");
 
   if (hasClinicalConsiderations && hasGuidanceOrNextSteps) {
+    if (
+      lower.includes("health summary") ||
+      lower.includes("summary") ||
+      lower.includes("feel free to ask") ||
+      lower.includes("let me know if") ||
+      lower.includes("take care") ||
+      lower.includes("wishing you")
+    ) {
+      return "COMPLETE";
+    }
     return "SUFFICIENT_FOR_PROVISIONAL_ASSESSMENT";
   }
 

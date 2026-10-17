@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/hooks/useAppContext";
 import { GenerateSummaryButton } from "@/components/clinical/GenerateSummaryButton";
 import { DocumentGenerationModal } from "@/components/clinical/DocumentGenerationModal";
+import { resolveApiUrl } from "@/lib/api-client";
+import { generateUUID } from "@/lib/uuid";
 
 function AegisProVoiceContent() {
   const { setSelectedModel } = useApp();
@@ -29,7 +31,7 @@ function AegisProVoiceContent() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cachedAgentIdRef = useRef<string>("agent_8001m00as049frhtj6694xbqyhvs");
-  const voiceConsultationIdRef = useRef<string>(crypto.randomUUID());
+  const voiceConsultationIdRef = useRef<string>(generateUUID());
 
   const [voiceMessages, setVoiceMessages] = useState<
     Array<{ role: "user" | "assistant"; content: string; event_id?: number; timestamp?: number }>
@@ -37,7 +39,7 @@ function AegisProVoiceContent() {
 
   // Pre-fetch agent configuration in background on mount so startCall is instantaneous
   useEffect(() => {
-    void fetch("/api/aegis-pro/config", { method: "GET", cache: "no-store" })
+    void fetch(resolveApiUrl("/api/aegis-pro/config"), { method: "GET", cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) return {};
         return (await res.json().catch(() => ({}))) as { agentId?: string };
@@ -166,7 +168,7 @@ function AegisProVoiceContent() {
     setErrorMessage(null);
     setVoiceMessages([]);
     setCapturedConversationId(null);
-    voiceConsultationIdRef.current = crypto.randomUUID();
+    voiceConsultationIdRef.current = generateUUID();
 
     try {
       const targetAgentId = cachedAgentIdRef.current || "agent_8001m00as049frhtj6694xbqyhvs";

@@ -16,7 +16,13 @@ import {
   clearActiveConsultationId,
   validateMessagesIsolation,
 } from "@/lib/consultation/consultationStorage";
-import { createCleanCaseState, extractInstantaneousCaseUpdates, type AegisCaseState } from "@/services/aegis/aegisCaseState";
+import {
+  createCleanCaseState,
+  extractInstantaneousCaseUpdates,
+  determineAssessmentStatusFromResponse,
+  type AegisCaseState,
+} from "@/services/aegis/aegisCaseState";
+import { generateUUID } from "@/lib/uuid";
 
 export type ChatStatus = "idle" | "sending" | "thinking" | "streaming" | "completed" | "error";
 
@@ -175,7 +181,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
       }
     }
 
-    const userMessageId = crypto.randomUUID();
+    const userMessageId = generateUUID();
     const optimisticUserMessage: ChatMessage = {
       id: userMessageId,
       consultationId: currentConsultationId || undefined,
@@ -203,7 +209,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
           : undefined,
     };
 
-    const assistantId = crypto.randomUUID();
+    const assistantId = generateUUID();
     const optimisticAssistantMessage: ChatMessage = {
       id: assistantId,
       consultationId: currentConsultationId || undefined,
@@ -332,7 +338,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             if (response.urgencyLevel) {
               setUrgencyLevel(response.urgencyLevel);
             }
-            const finalCaseId: string = response.caseId || currentConsultationId || crypto.randomUUID();
+            const finalCaseId: string = response.caseId || currentConsultationId || generateUUID();
             setActiveCaseId(finalCaseId);
             activeCaseIdRef.current = finalCaseId;
             setActiveConsultationId(finalCaseId);
@@ -453,7 +459,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
 
       // Queue the message with its consultation ID
       const queuedItem: QueuedMessage = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         consultationId: currentId || undefined,
         content,
         attachment: attachmentInput,
@@ -549,12 +555,44 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
         setChatStatus("idle");
         setError(null);
 
-        const caseStateMeta = (caseRecord.metadata as Record<string, unknown> | undefined)?.case_state as Record<string, unknown> | undefined;
-        if (caseStateMeta?.assessment_status) {
-          setAssessmentStatus(String(caseStateMeta.assessment_status));
+        const meta = (caseRecord.metadata as Record<string, unknown> | undefined) || {};
+        const caseStateMeta = (meta.aegisCaseState || meta.case_state || meta.caseState) as Record<string, unknown> | undefined;
+
+        let resolvedStatus = String(
+          meta.assessment_status ||
+          caseStateMeta?.assessment_status ||
+          caseStateMeta?.assessment_completeness ||
+          ""
+        );
+
+        const resolvedUrgency = String(
+          meta.urgency_level ||
+          caseStateMeta?.urgency_level ||
+          ""
+        );
+
+        if (resolvedUrgency) {
+          setUrgencyLevel(resolvedUrgency);
         }
-        if (caseStateMeta?.urgency_level) {
-          setUrgencyLevel(String(caseStateMeta.urgency_level));
+
+        // If an old chat doesn't have an explicit status saved, evaluate its messages:
+        if (!resolvedStatus || resolvedStatus === "INCOMPLETE") {
+          const assistantMessages = taggedMessages.filter((m) => m.role === "assistant");
+          if (assistantMessages.length >= 2) {
+            const lastAssistant = assistantMessages[assistantMessages.length - 1];
+            if (lastAssistant) {
+              const determined = determineAssessmentStatusFromResponse(lastAssistant.content, "INCOMPLETE");
+              if (determined !== "INCOMPLETE") {
+                resolvedStatus = determined;
+              } else if (assistantMessages.length >= 3) {
+                resolvedStatus = "SUFFICIENT_FOR_PROVISIONAL_ASSESSMENT";
+              }
+            }
+          }
+        }
+
+        if (resolvedStatus) {
+          setAssessmentStatus(resolvedStatus);
         }
 
         // Update local isolated consultation cache

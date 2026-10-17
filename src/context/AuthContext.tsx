@@ -12,10 +12,14 @@ import React, {
 import type { User, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { UserPersona } from "@/lib/types";
+import { resolveApiUrl } from "@/lib/api-client";
+import { Capacitor } from "@capacitor/core";
 import {
   normalizePhoneNumber,
   isValidPhoneNumber,
   phoneToInternalEmail,
+  getPhoneAliasCandidates,
+  sanitizeAuthError,
 } from "@/lib/auth/phoneUtils";
 
 export interface SignUpOptions {
@@ -282,7 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase, syncDoctorRegistration]);
+  }, [supabase, syncDoctorRegistration, syncUserProfile]);
 
   const openAuthModal = useCallback(
     (persona: UserPersona = "patient", mode: "signin" | "signup" = "signin") => {
@@ -322,12 +326,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem("hippocrates_persona", persona);
         }
 
-        const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
-        const rawOrigin = (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("0.0.0.0"))
-          ? window.location.origin
-          : (configuredSiteUrl || "http://localhost:3000");
-        const origin = rawOrigin.replace(/\/$/, "").replace("0.0.0.0", "localhost");
-        const redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
+        let redirectTo: string;
+        if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
+          redirectTo = `ai.hippocrates.app://auth/callback?persona=${persona}&next=${encodeURIComponent("/")}`;
+        } else {
+          const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+          const rawOrigin = (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("0.0.0.0"))
+            ? window.location.origin
+            : (configuredSiteUrl || "http://localhost:3000");
+          const origin = rawOrigin.replace(/\/$/, "").replace("0.0.0.0", "localhost");
+          redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
+        }
 
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
@@ -412,7 +421,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Step 1: Attempt server auto-confirm signup (bypasses email verification if service key configured)
         try {
-          const apiRes = await fetch("/api/auth/signup", {
+          const apiRes = await fetch(resolveApiUrl("/api/auth/signup"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -544,41 +553,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const cleanPhone = normalizePhoneNumber(phone);
+      const candidates = getPhoneAliasCandidates(cleanPhone);
 
       try {
-        // Step 1: Try native Supabase phone sign-in
-        let result = await supabase.auth.signInWithPassword({
-          phone: cleanPhone,
-          password,
-        });
+        let authResult = null;
+        let lastError: Error | { message?: string } | null = null;
 
-        // Step 2: Fallback to internal phone alias if phone provider not configured in project dashboard
-        if (result.error) {
-          const aliasEmail = phoneToInternalEmail(cleanPhone);
-          const aliasResult = await supabase.auth.signInWithPassword({
+        // Step 1: Try candidate internal aliases
+        for (const aliasEmail of candidates) {
+          const res = await supabase.auth.signInWithPassword({
             email: aliasEmail,
             password,
           });
 
-          if (!aliasResult.error) {
-            result = aliasResult;
+          if (!res.error && res.data?.user) {
+            authResult = res;
+            break;
+          } else if (res.error) {
+            lastError = res.error;
           }
         }
 
-        if (result.error) {
-          return { error: result.error };
+        // Step 2: Try native phone sign-in if provider is ever enabled in future Supabase config
+        if (!authResult) {
+          try {
+            const nativeRes = await supabase.auth.signInWithPassword({
+              phone: cleanPhone,
+              password,
+            });
+            if (!nativeRes.error && nativeRes.data?.user) {
+              authResult = nativeRes;
+            } else if (nativeRes.error) {
+              const msg = (nativeRes.error.message || "").toLowerCase();
+              if (!msg.includes("disabled") && !msg.includes("sms")) {
+                lastError = nativeRes.error;
+              }
+            }
+          } catch {
+            // Ignore native failure
+          }
         }
 
-        if (result.data.user) {
-          setUser(result.data.user);
-          setSession(result.data.session);
-          syncDoctorRegistration(result.data.user);
-          void syncUserProfile(result.data.user);
+        if (!authResult || !authResult.data?.user) {
+          return {
+            error: new Error(
+              sanitizeAuthError(lastError || "Invalid mobile phone number or password.", "signin")
+            ),
+          };
         }
+
+        const currentUser = authResult.data.user;
+        setUser(currentUser);
+        setSession(authResult.data.session);
+        syncDoctorRegistration(currentUser);
+        void syncUserProfile(currentUser);
 
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to sign in with phone number") };
+        return {
+          error: new Error(sanitizeAuthError(err instanceof Error ? err.message : "Failed to sign in", "signin")),
+        };
       }
     },
     [supabase, syncDoctorRegistration, syncUserProfile]
@@ -599,10 +633,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!phone || !isValidPhoneNumber(phone)) {
-        return { error: new Error("Please enter a valid mobile phone number (including country code, e.g. +1... or +91...).") };
+        return { error: new Error("Please enter a valid mobile phone number.") };
       }
 
       const cleanPhone = normalizePhoneNumber(phone);
+      const aliasEmail = phoneToInternalEmail(cleanPhone);
 
       try {
         if (role === "doctor" && (!doctorRegistrationNumber || doctorRegistrationNumber.trim().length === 0)) {
@@ -611,9 +646,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const trimmedReg = doctorRegistrationNumber?.trim() || null;
 
-        // Step 1: Try native Supabase phone sign-up
-        let result = await supabase.auth.signUp({
-          phone: cleanPhone,
+        // Step 1: Server-side registration via /api/auth/signup (uses service role key to auto-confirm & sync profile)
+        try {
+          const apiRes = await fetch(resolveApiUrl("/api/auth/signup"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone: cleanPhone,
+              password,
+              fullName,
+              role,
+              doctorRegistrationNumber: trimmedReg,
+            }),
+          });
+          const apiData = await apiRes.json().catch(() => ({}));
+
+          if (apiRes.ok && apiData.ok && apiData.user) {
+            // User registered & auto-confirmed! Immediately sign in to establish active session
+            const loginRes = await supabase.auth.signInWithPassword({
+              email: aliasEmail,
+              password,
+            });
+
+            if (loginRes.data?.user) {
+              setUser(loginRes.data.user);
+              setSession(loginRes.data.session);
+              if (trimmedReg) {
+                setDoctorRegistrationNumber(trimmedReg);
+                try {
+                  localStorage.setItem(`hippocrates_dr_reg_${loginRes.data.user.id}`, trimmedReg);
+                  localStorage.setItem("hippocrates_persona", "doctor");
+                } catch {}
+              }
+              void syncUserProfile(loginRes.data.user);
+              return { error: null };
+            }
+          } else if (apiData.error && !apiData.fallbackToClient) {
+            return { error: new Error(sanitizeAuthError(apiData.error, "signup")) };
+          }
+        } catch {
+          // Fall through to client registration
+        }
+
+        // Step 2: Client-side registration using internal alias
+        const result = await supabase.auth.signUp({
+          email: aliasEmail,
           password,
           options: {
             data: {
@@ -625,52 +702,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         });
 
-        // Step 2: Fallback to phone alias if phone signups/SMS provider are disabled in dashboard
-        if (
-          result.error &&
-          (result.error.message.toLowerCase().includes("phone signups are disabled") ||
-            result.error.message.toLowerCase().includes("unsupported") ||
-            result.error.message.toLowerCase().includes("sms"))
-        ) {
-          const aliasEmail = phoneToInternalEmail(cleanPhone);
-          result = await supabase.auth.signUp({
-            email: aliasEmail,
-            password,
-            options: {
-              data: {
-                full_name: fullName,
-                role,
-                doctor_registration_number: trimmedReg,
-                phone: cleanPhone,
-              },
-            },
-          });
-        }
-
         if (result.error) {
-          const errLower = (result.error.message || "").toLowerCase();
-          if (
-            errLower.includes("already registered") ||
-            errLower.includes("already exists") ||
-            errLower.includes("user already") ||
-            errLower.includes("phone already") ||
-            errLower.includes("email already")
-          ) {
-            return {
-              error: new Error("An account with this phone number is already registered. Please log in instead."),
-            };
-          }
-          return { error: result.error };
+          return { error: new Error(sanitizeAuthError(result.error, "signup")) };
         }
 
-        // Supabase returns an empty identities array when a user with this phone/alias already exists
+        // Supabase returns an empty identities array when a user with this alias already exists
         if (result.data?.user && Array.isArray(result.data.user.identities) && result.data.user.identities.length === 0) {
           return {
-            error: new Error("An account with this phone number is already registered. Please log in instead."),
+            error: new Error("An account with this mobile phone number is already registered. Please log in instead."),
           };
         }
 
-        if (result.data.user) {
+        if (result.data?.user) {
           setUser(result.data.user);
           setSession(result.data.session);
           if (trimmedReg) {
@@ -678,16 +721,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
               localStorage.setItem(`hippocrates_dr_reg_${result.data.user.id}`, trimmedReg);
               localStorage.setItem("hippocrates_persona", "doctor");
-            } catch {
-              // ignore
-            }
+            } catch {}
           }
           void syncUserProfile(result.data.user);
+
+          // If session was null (due to Supabase email confirmation requirement), try immediate sign-in
+          if (!result.data.session) {
+            const loginAttempt = await supabase.auth.signInWithPassword({
+              email: aliasEmail,
+              password,
+            });
+            if (loginAttempt.data?.session) {
+              setSession(loginAttempt.data.session);
+              setUser(loginAttempt.data.user);
+              return { error: null };
+            }
+          }
         }
 
         return { error: null };
       } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Failed to register account with phone number") };
+        return {
+          error: new Error(sanitizeAuthError(err instanceof Error ? err.message : "Failed to register account with phone number", "signup")),
+        };
       }
     },
     [supabase, isPatientAccount, syncUserProfile]

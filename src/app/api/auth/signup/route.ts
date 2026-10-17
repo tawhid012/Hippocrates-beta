@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  normalizePhoneNumber,
+  phoneToInternalEmail,
+  getPhoneAliasCandidates,
+} from "@/lib/auth/phoneUtils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +16,7 @@ export async function POST(req: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // If Service Role Key is available, use Supabase Admin API to auto-confirm user without email verification
+    // If Service Role Key is available, use Supabase Admin API to auto-confirm user without email/SMS verification
     if (supabaseUrl && serviceRoleKey) {
       const adminClient = createClient(supabaseUrl, serviceRoleKey, {
         auth: {
@@ -21,20 +26,34 @@ export async function POST(req: NextRequest) {
       });
 
       const cleanEmail = email ? String(email).trim().toLowerCase() : undefined;
-      const cleanPhone = phone ? String(phone).trim() : undefined;
+      const cleanPhone = phone ? normalizePhoneNumber(String(phone)) : undefined;
       const userRole = role === "doctor" ? "doctor" : "patient";
       const cleanRegNo = userRole === "doctor" && doctorRegistrationNumber ? String(doctorRegistrationNumber).trim() : null;
-      const cleanName = fullName ? String(fullName).trim() : (cleanEmail ? cleanEmail.split("@")[0] : "User");
+      const cleanName = fullName
+        ? String(fullName).trim()
+        : cleanEmail
+        ? cleanEmail.split("@")[0]
+        : cleanPhone || "User";
+
+      // The primary account email is either the real email or the phone alias
+      const targetEmail = cleanEmail || (cleanPhone ? phoneToInternalEmail(cleanPhone) : undefined);
+
+      if (!targetEmail) {
+        return NextResponse.json(
+          { ok: false, error: "Please provide a valid email or mobile phone number." },
+          { status: 400 }
+        );
+      }
 
       // Check if user with this email or phone is already registered in profiles
       if (cleanEmail) {
-        const { data: existingProfile } = await adminClient
+        const { data: existingEmailProfile } = await adminClient
           .from("profiles")
           .select("id, email")
           .ilike("email", cleanEmail)
           .limit(1);
 
-        if (existingProfile && existingProfile.length > 0) {
+        if (existingEmailProfile && existingEmailProfile.length > 0) {
           return NextResponse.json(
             {
               ok: false,
@@ -47,10 +66,11 @@ export async function POST(req: NextRequest) {
       }
 
       if (cleanPhone) {
+        const candidateAliases = getPhoneAliasCandidates(cleanPhone);
         const { data: existingPhoneProfile } = await adminClient
           .from("profiles")
-          .select("id, phone")
-          .eq("phone", cleanPhone)
+          .select("id, phone, email")
+          .or(`phone.eq.${cleanPhone},email.in.(${candidateAliases.map((a) => `"${a}"`).join(",")})`)
           .limit(1);
 
         if (existingPhoneProfile && existingPhoneProfile.length > 0) {
@@ -58,23 +78,23 @@ export async function POST(req: NextRequest) {
             {
               ok: false,
               code: "PHONE_ALREADY_EXISTS",
-              error: "An account with this phone number is already registered. Please sign in instead.",
+              error: "An account with this mobile phone number is already registered. Please sign in instead.",
             },
             { status: 409 }
           );
         }
       }
 
+      // Create user auto-confirmed using targetEmail (bypasses missing SMS provider in Supabase)
       const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
-        email: cleanEmail,
-        phone: cleanPhone,
+        email: targetEmail,
         password: String(password),
         email_confirm: true,
-        phone_confirm: true,
         user_metadata: {
           full_name: cleanName,
           role: userRole,
           doctor_registration_number: cleanRegNo,
+          phone: cleanPhone || null,
         },
       });
 
@@ -90,8 +110,10 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(
             {
               ok: false,
-              code: "EMAIL_ALREADY_EXISTS",
-              error: "An account with this email address is already registered. Please sign in instead.",
+              code: cleanPhone ? "PHONE_ALREADY_EXISTS" : "EMAIL_ALREADY_EXISTS",
+              error: cleanPhone
+                ? "An account with this mobile phone number is already registered. Please sign in instead."
+                : "An account with this email address is already registered. Please sign in instead.",
             },
             { status: 409 }
           );
@@ -106,7 +128,7 @@ export async function POST(req: NextRequest) {
           await adminClient.from("profiles").upsert(
             {
               id: createData.user.id,
-              email: cleanEmail || null,
+              email: targetEmail,
               phone: cleanPhone || null,
               full_name: cleanName,
               role: userRole,

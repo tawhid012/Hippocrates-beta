@@ -11,6 +11,7 @@ import { ChatInput, type AttachmentFile } from "./ChatInput";
 import { useApp } from "@/hooks/useAppContext";
 import { ConversationLoadingSkeleton } from "@/components/skeletons/ConversationLoadingSkeleton";
 import { GenerateSummaryButton } from "@/components/clinical/GenerateSummaryButton";
+import { ModelSelector } from "@/components/model-selector/ModelSelector";
 
 interface ChatAreaProps {
   messages: ChatMessage[];
@@ -161,43 +162,98 @@ export function ChatArea({
   const lastMsg = messages[messages.length - 1];
   const showTypingIndicator = isLoading && (!lastMsg || lastMsg.role === "user");
 
-  if (!hasMessages) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center px-4 sm:px-8 pb-14 sm:pb-20">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-          className="text-center mb-10 sm:mb-16 max-w-2xl w-full px-2"
-        >
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
-            {isPatient ? "AEGIS PATIENT HEALTH INTELLIGENCE" : "Oracle Clinical Workspace"}
-          </p>
-          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-medium tracking-[-0.02em] text-foreground/95 mb-3.5 leading-[1.12]">
-            {isPatient ? `${greeting}.` : `${greeting}, Doctor.`}
-          </h2>
-          <p className="text-sm sm:text-base text-muted-foreground/75 font-normal tracking-[-0.01em] leading-relaxed max-w-lg mx-auto">
-            {isPatient
-              ? "How can Aegis help explain your symptoms, reports, or health questions today?"
-              : "How can Oracle assist your clinical workflow today?"}
-          </p>
-        </motion.div>
+  const suggestionChips = isPatient
+    ? [
+        { label: "Check symptoms", icon: Sparkles, prompt: "I would like to check some symptoms I've been having." },
+        { label: "Explain blood report", icon: Sparkles, prompt: "Can you help explain the key test values in my medical blood report?" },
+        { label: "Medication safety", icon: Sparkles, prompt: "Can you explain how this medication works and any common precautions?" },
+        { label: "Physical rash or swelling", icon: Sparkles, prompt: "I have a visible skin rash/swelling and want to understand possible causes." },
+      ]
+    : [
+        { label: "Differential Diagnosis", icon: Sparkles, prompt: "Help me analyze differential diagnoses for a patient presenting with: " },
+        { label: "Consultation Listening", icon: Sparkles, prompt: "Ready to capture and synthesize ambient clinical consultation dialogue." },
+        { label: "Clinical Summary & SOAP", icon: Sparkles, prompt: "Draft a clinical summary and SOAP note based on recent diagnostic findings." },
+        { label: "Drug Interactions", icon: Sparkles, prompt: "Check drug-drug interactions and dosing guidelines for: " },
+      ];
 
-        <div className="w-full max-w-2xl px-2">
-          <ChatInput onSend={onSend} centered />
-        </div>
-      </div>
-    );
-  }
+  const handleChipClick = (prompt: string) => {
+    onSend(prompt);
+  };
 
   return (
     <div className="flex flex-1 flex-col min-h-0 relative">
+      {/* Floating Model Selector before starting a chat — disappears once chat starts */}
+      <AnimatePresence>
+        {!hasMessages && (
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            className="absolute top-2.5 inset-x-0 z-30 flex justify-center pointer-events-none px-4"
+          >
+            <div className="pointer-events-auto shadow-md rounded-full">
+              <ModelSelector />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth"
+        className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth flex flex-col"
       >
-        <div className="max-w-3xl mx-auto py-5 sm:py-8 space-y-1 px-2 sm:px-4">
+        {!hasMessages ? (
+          <div className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 py-6 pt-14 max-w-2xl mx-auto w-full text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
+              className="space-y-3 mb-8 w-full"
+            >
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-semibold tracking-wide border border-blue-500/20">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{isPatient ? "Aegis Health Intelligence" : "Oracle Clinical Copilot"}</span>
+              </div>
+
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                {isPatient ? `${greeting}.` : `${greeting}, Doctor.`}
+              </h2>
+
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                {isPatient
+                  ? "Ask health questions, describe symptoms, or attach photos and lab reports for clinical insights."
+                  : "Clinical decision support, diagnostic assistance, and ambient consultation capture."}
+              </p>
+            </motion.div>
+
+            {/* Native Android Suggestion Chips */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.1 }}
+              className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 text-left"
+            >
+              {suggestionChips.map((chip, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleChipClick(chip.prompt)}
+                  className="flex items-center gap-2.5 p-3 rounded-2xl bg-card hover:bg-muted/70 text-card-foreground border border-border/80 shadow-2xs hover:shadow-xs active:scale-[0.98] transition-all cursor-pointer group text-left"
+                >
+                  <div className="h-7 w-7 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <chip.icon className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-xs font-medium text-foreground/90 group-hover:text-foreground line-clamp-1">
+                    {chip.label}
+                  </span>
+                </button>
+              ))}
+            </motion.div>
+          </div>
+        ) : (
+          <div className="max-w-3xl mx-auto py-4 sm:py-6 space-y-1 px-2 sm:px-4 w-full">
           <AnimatePresence mode="popLayout">
             {messages.map((message) => (
               <Message
@@ -211,19 +267,25 @@ export function ChatArea({
 
           {showTypingIndicator && <TypingIndicator statusText={statusText} />}
 
-          {/* Aegis Clinical Status & Summary Action Card */}
-          {isPatient && messages.length >= 2 && !isLoading && !isStreaming && onOpenSummary && (() => {
-            const config = getAssessmentStatusConfig(assessmentStatus, urgencyLevel);
+          {/* Aegis Clinical Status & Summary Action Card — only shown when diagnosis progress is complete or ready */}
+          {isPatient &&
+            messages.length >= 2 &&
+            !isLoading &&
+            !isStreaming &&
+            onOpenSummary &&
+            assessmentStatus !== "INCOMPLETE" &&
+            (() => {
+              const config = getAssessmentStatusConfig(assessmentStatus, urgencyLevel);
             const IconComponent = config.icon;
             return (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`my-6 p-5 rounded-2xl glass-strong border ${
+                className={`my-6 p-5 rounded-2xl border ${
                   config.isUrgent
-                    ? "border-red-500/30 bg-red-50/50 dark:bg-red-950/20"
-                    : "border-white/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-950/60"
-                } shadow-[0_16px_40px_-8px_rgba(26,39,68,0.06)] backdrop-blur-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden`}
+                    ? "border-red-500/30 bg-red-500/10 text-card-foreground"
+                    : "border-border bg-card text-card-foreground shadow-xs"
+                } flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden`}
               >
                 {/* Soft subtle backing glow inside the card */}
                 <div className={`absolute top-0 right-0 w-32 h-32 rounded-full ${config.glowColor} blur-2xl pointer-events-none`} />
@@ -234,14 +296,14 @@ export function ChatArea({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-serif font-bold text-slate-900 dark:text-white tracking-tight">
+                      <p className="text-sm font-semibold text-foreground tracking-tight">
                         {config.title}
                       </p>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${config.badgeStyle}`}>
                         {config.badgeText}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed max-w-md">
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed max-w-md">
                       {config.description}
                     </p>
                   </div>
@@ -263,6 +325,7 @@ export function ChatArea({
 
           <div ref={bottomRef} className="h-4" />
         </div>
+        )}
       </div>
 
       {/* Discreet floating "↓ New response" button if user scrolled up while reading */}

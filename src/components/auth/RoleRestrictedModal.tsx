@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
+import { formatUserIdentifier } from "@/lib/auth/phoneUtils";
 import { useApp } from "@/hooks/useAppContext";
 import {
   ShieldAlert,
@@ -82,7 +83,7 @@ export function RoleRestrictedModal() {
                 Patient Role
               </span>
             </div>
-            <p className="font-semibold text-slate-900 truncate">{user?.email}</p>
+            <p className="font-semibold text-slate-900 truncate">{formatUserIdentifier(user)}</p>
           </div>
 
           <p>

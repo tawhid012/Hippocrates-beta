@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import type { NormalizedClinicalSummary, ModelType, MedicationDiscussionItem } from "./types";
 import { validateClinicalDocument } from "./validateClinicalDocument";
-import { getGeminiModelName, getGeminiCandidateModels } from "@/lib/gemini/config";
+import { getGeminiCandidateModels } from "@/lib/gemini/config";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
 
 const DEFAULT_DISCLAIMER =
@@ -462,7 +462,6 @@ ${fullText}
   const nowIso = new Date().toISOString();
 
   let extractedData: Partial<NormalizedClinicalSummary> = {};
-  const preferredModel = getGeminiModelName();
   const modelsToTry = getGeminiCandidateModels();
 
   try {

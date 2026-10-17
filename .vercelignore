@@ -1,0 +1,9 @@
+android/
+*.apk
+public/*.apk
+.git/
+.github/
+.next/
+node_modules/
+tests/
+scratch/

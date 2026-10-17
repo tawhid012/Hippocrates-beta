@@ -7,8 +7,29 @@
 
 import type { CaseSummary, CaseWithMessages, ChatRequest, ChatResponse } from "./types";
 import { createBrowserSupabaseClient } from "./supabase/client";
+import { Capacitor } from "@capacitor/core";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+export function getResolvedApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (typeof window !== "undefined" && Capacitor.isNativePlatform() && siteUrl) {
+    return `${siteUrl.replace(/\/$/, "")}/api`;
+  }
+  return "/api";
+}
+
+export function resolveApiUrl(path: string): string {
+  const base = getResolvedApiBaseUrl();
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  if (cleanPath.startsWith("/api/")) {
+    return `${base}${cleanPath.replace(/^\/api/, "")}`;
+  }
+  return `${base}${cleanPath}`;
+}
+
+const API_BASE_URL = getResolvedApiBaseUrl();
 
 interface ApiErrorBody {
   error?: string;

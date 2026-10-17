@@ -10,6 +10,8 @@ import { useApp } from "@/hooks/useAppContext";
 import { Badge } from "@/components/ui/badge";
 import type { AIModelId } from "@/lib/types";
 
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
+
 export function ModelSelector() {
   const { persona, selectedModel, setSelectedModel } = useApp();
   const [open, setOpen] = useState(false);
@@ -21,8 +23,15 @@ export function ModelSelector() {
   const currentModel =
     models.find((m) => m.id === selectedModel) || models[0];
 
+  const triggerHaptic = () => {
+    try {
+      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+    } catch {}
+  };
+
   const handleSelect = (modelId: string, available: boolean) => {
     if (!available) return;
+    triggerHaptic();
     setSelectedModel(modelId as AIModelId);
     setOpen(false);
   };
@@ -31,27 +40,31 @@ export function ModelSelector() {
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          triggerHaptic();
+          setOpen(!open);
+        }}
         className={cn(
-          "glass-control flex items-center gap-2.5 rounded-xl px-4 py-2 text-[13px] font-medium",
-          "transition-all duration-200 cursor-pointer hover:-translate-y-px",
-          open && "bg-white/85 shadow-[0_16px_42px_rgba(26,39,68,0.08)] ring-1 ring-hippo-navy/[0.05]"
+          "flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold tracking-tight",
+          "bg-card/95 hover:bg-card text-foreground border border-border/90 transition-all cursor-pointer shadow-md backdrop-blur-md",
+          "active:scale-95",
+          open && "ring-2 ring-blue-500/30 border-blue-500/50"
         )}
       >
         {isPatient ? (
-          <Shield className="h-3.5 w-3.5 text-hippo-blue" strokeWidth={2} />
+          <Shield className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2.2} />
         ) : (
-          <Stethoscope className="h-3.5 w-3.5 text-accent" strokeWidth={2} />
+          <Stethoscope className="h-3.5 w-3.5 text-blue-500" strokeWidth={2.2} />
         )}
 
-        <span className="text-foreground/90 font-medium">{currentModel.name}</span>
+        <span className="font-semibold text-foreground/90">{currentModel.name}</span>
 
         <ChevronDown
           className={cn(
-            "h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-250",
+            "h-3 w-3 text-muted-foreground transition-transform duration-200",
             open && "rotate-180"
           )}
-          strokeWidth={2}
+          strokeWidth={2.2}
         />
       </button>
 
@@ -59,30 +72,30 @@ export function ModelSelector() {
         {open && (
           <>
             <div
-              className="fixed inset-0 z-40"
+              className="fixed inset-0 z-40 bg-black/20 dark:bg-black/40 backdrop-blur-xs"
               onClick={() => setOpen(false)}
               aria-hidden
             />
             <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.97 }}
+              initial={{ opacity: 0, y: -6, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.97 }}
-              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-[min(340px,calc(100vw-2rem))] bg-white/65 backdrop-blur-xl border border-white/50 rounded-[1.35rem] p-2.5 shadow-[0_28px_80px_rgba(26,39,68,0.14)]"
+              exit={{ opacity: 0, y: -6, scale: 0.96 }}
+              transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 w-[min(340px,calc(100vw-2rem))] bg-card/95 backdrop-blur-2xl border border-border rounded-2xl p-2 shadow-2xl"
             >
               <div className="px-3 py-2 mb-1 border-b border-border/40">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
                     {isPatient ? "Aegis Models (Patient AI)" : "Oracle Models (Doctor AI)"}
                   </p>
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-accent/10 text-accent">
-                    {isPatient ? "Aegis Core Active" : "Oracle Core Active"}
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    Active
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/70">
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                   {isPatient
-                    ? "Patient health intelligence for symptoms and lab report analysis."
-                    : "Clinical decision support for doctors and medical professionals."}
+                    ? "Patient health guidance for symptoms and report interpretation."
+                    : "Clinical decision support for certified medical practitioners."}
                 </p>
               </div>
 
@@ -98,29 +111,29 @@ export function ModelSelector() {
                       onClick={() => handleSelect(model.id, isAvailable)}
                       disabled={!isAvailable}
                       className={cn(
-                        "w-full text-left px-3 py-3 rounded-[1rem] transition-all duration-150",
+                        "w-full text-left px-3 py-2.5 rounded-xl transition-all duration-150",
                         !isAvailable
-                          ? "opacity-65 cursor-not-allowed bg-slate-50/40"
-                          : "cursor-pointer hover:bg-white/70 hover:shadow-[0_10px_26px_rgba(26,39,68,0.045)]",
+                          ? "opacity-50 cursor-not-allowed"
+                          : "cursor-pointer hover:bg-muted/70 active:scale-[0.99]",
                         isSelected &&
                           isAvailable &&
-                          "bg-white/80 ring-1 ring-accent/20 shadow-[0_10px_28px_rgba(26,39,68,0.065)]"
+                          "bg-muted/90 font-semibold ring-1 ring-blue-500/30 dark:ring-blue-500/40"
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Sparkles
                             className={cn(
                               "h-3.5 w-3.5 shrink-0",
                               isSelected && isAvailable
-                                ? "text-accent"
-                                : "text-muted-foreground/50"
+                                ? "text-blue-500"
+                                : "text-muted-foreground/60"
                             )}
                             strokeWidth={2}
                           />
                           <span
                             className={cn(
-                              "text-[13px] font-semibold",
+                              "text-xs font-semibold",
                               isSelected && isAvailable
                                 ? "text-foreground"
                                 : "text-foreground/80"
@@ -135,11 +148,11 @@ export function ModelSelector() {
                             <Badge variant="upcoming">Coming Soon</Badge>
                           )}
                           {isSelected && isAvailable && (
-                            <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2.5} />
+                            <Check className="h-3.5 w-3.5 text-blue-500" strokeWidth={2.5} />
                           )}
                         </div>
                       </div>
-                      <p className="text-[11px] text-muted-foreground/80 mt-1 ml-6 leading-relaxed">
+                      <p className="text-[11px] text-muted-foreground mt-0.5 ml-5.5 leading-relaxed">
                         {model.description}
                       </p>
                     </button>

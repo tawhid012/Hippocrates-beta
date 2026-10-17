@@ -93,7 +93,7 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
           )}
 
           {/* User Message Bubble */}
-          <div className="rounded-2xl rounded-tr-xs bg-slate-900 text-white px-4 py-2.5 sm:px-5 sm:py-3 shadow-xs">
+          <div className="rounded-[20px] rounded-br-[4px] bg-blue-600 text-white px-4.5 py-2.5 sm:px-5 sm:py-3 shadow-xs">
             <p className="text-[14.5px] sm:text-[15px] leading-relaxed whitespace-pre-wrap">
               {message.content}
             </p>
@@ -111,21 +111,21 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
-      className="group flex gap-3 sm:gap-4 py-4 px-2 sm:px-4 w-full"
+      className="group flex gap-3 sm:gap-4 py-3.5 px-2 sm:px-4 w-full"
     >
       {/* AI Assistant Avatar Badge */}
       <div
         className={cn(
-          "flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold mt-0.5 select-none",
+          "flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-xl text-xs font-semibold mt-0.5 select-none shadow-2xs",
           isPatient
-            ? "bg-emerald-500/10 text-emerald-700 border border-emerald-600/20"
-            : "bg-blue-500/10 text-blue-700 border border-blue-600/20"
+            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25"
+            : "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/25"
         )}
       >
         {isPatient ? (
-          <Shield className="h-4 w-4 text-emerald-600" />
+          <Shield className="h-4 w-4" />
         ) : (
-          <Stethoscope className="h-4 w-4 text-blue-600" />
+          <Stethoscope className="h-4 w-4" />
         )}
       </div>
 
@@ -133,8 +133,11 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
       <div className="flex-1 min-w-0 max-w-full sm:max-w-[720px] space-y-1.5">
         {/* Assistant Header Identifier */}
         <div className="flex items-center gap-2 select-none mb-1">
-          <span className="text-[13.5px] font-semibold text-slate-900 tracking-tight">
+          <span className="text-[13.5px] font-bold text-foreground tracking-tight">
             {isPatient ? "Aegis" : "Oracle"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+            {isPatient ? "Patient Health Intelligence" : "Clinical Decision Support"}
           </span>
         </div>
 
