@@ -5,10 +5,11 @@ import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 // Capacitor can connect its secure native shell directly to the hosted Next.js backend,
 // while preserving all native device features, audio recording, and hardware back button.
 // Production hosted backend for Android APK (accessible globally over Wi-Fi & cellular 4G/5G)
-const DEFAULT_SERVER_URL = "https://hippocrates-mobile.vercel.app";
-const serverUrl =
+const DEFAULT_SERVER_URL =
   process.env.CAPACITOR_SERVER_URL ||
-  DEFAULT_SERVER_URL;
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "https://hippocrates-beta.vercel.app";
+const serverUrl = DEFAULT_SERVER_URL;
 
 const isHttp = serverUrl.startsWith("http://");
 
@@ -21,6 +22,7 @@ const config: CapacitorConfig = {
     cleartext: isHttp,
     androidScheme: "https",
     allowNavigation: [
+      "hippocrates-beta.vercel.app",
       "hippocrates-mobile.vercel.app",
       "*.vercel.app",
       "*.supabase.co",
