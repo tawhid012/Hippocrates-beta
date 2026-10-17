@@ -23,7 +23,9 @@ const config: CapacitorConfig = {
     allowNavigation: [
       "hippocrates-mobile.vercel.app",
       "*.vercel.app",
-      "*.supabase.co"
+      "*.supabase.co",
+      "accounts.google.com",
+      "*.google.com"
     ],
   },
   plugins: {
