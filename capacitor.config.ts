@@ -7,8 +7,7 @@ import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 // Production hosted backend for Android APK (accessible globally over Wi-Fi & cellular 4G/5G)
 const DEFAULT_SERVER_URL =
   process.env.CAPACITOR_SERVER_URL ||
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://hippocrates-beta.vercel.app";
+  "https://hippocrates-mobile.vercel.app";
 const serverUrl = DEFAULT_SERVER_URL;
 
 const isHttp = serverUrl.startsWith("http://");
