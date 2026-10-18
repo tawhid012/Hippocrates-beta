@@ -172,7 +172,7 @@ export default function GetStartedPage() {
 
                 <ol className="space-y-4 text-sm text-slate-700 list-decimal list-inside">
                   <li className="leading-relaxed">
-                    Open Safari and navigate to <strong>https://www.hippocrates.in</strong> (or your deployment URL).
+                    Open Safari and navigate to <strong>https://hippocrates.in</strong> (or your deployment URL).
                   </li>
                   <li className="leading-relaxed">
                     Tap the <strong>Share</strong> icon (square with an arrow pointing upward) at the bottom toolbar.
@@ -200,7 +200,7 @@ export default function GetStartedPage() {
 
                 <ol className="space-y-4 text-sm text-slate-700 list-decimal list-inside">
                   <li className="leading-relaxed">
-                    Open Chrome and navigate to <strong>https://www.hippocrates.in</strong>.
+                    Open Chrome and navigate to <strong>https://hippocrates.in</strong>.
                   </li>
                   <li className="leading-relaxed">
                     Tap the <strong>Three-Dots Menu</strong> icon (⋮) in the top-right corner.

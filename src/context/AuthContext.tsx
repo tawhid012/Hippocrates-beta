@@ -328,7 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
         const origin = isLocal
           ? window.location.origin
-          : (process.env.NEXT_PUBLIC_CANONICAL_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://www.hippocrates.in").replace(/\/$/, "");
+          : (process.env.NEXT_PUBLIC_CANONICAL_URL || process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" && window.location.origin.includes("hippocrates.in") ? window.location.origin : "https://hippocrates.in")).replace(/\/$/, "");
         const redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
 
         const { error } = await supabase.auth.signInWithOAuth({

@@ -16,7 +16,6 @@ export interface SiteConfig {
   tagline: string;
   description: string;
   productionDomain: string;
-  currentBetaDomain: string;
   socials: {
     twitter?: string;
     github?: string;
@@ -46,10 +45,9 @@ export const SITE_CONFIG: SiteConfig = {
   tagline: "Dual-Engine Clinical Intelligence Platform",
   description:
     "Hippocrates is an advanced healthcare AI platform delivering dual-engine intelligence: Aegis for patient health understanding and consultation preparation, and Oracle for physician clinical decision support and differential reasoning.",
-  productionDomain: "https://www.hippocrates.in",
-  currentBetaDomain: "https://hippocrates-beta.vercel.app",
+  productionDomain: "https://hippocrates.in",
   socials: {
-    github: "https://github.com/tawhid012/hippocrates-beta",
+    github: "https://github.com/tawhid012/Hippocrates-beta",
     twitter: "https://twitter.com/hippocrates_ai",
     linkedin: "https://linkedin.com/company/hippocrates-ai",
   },
@@ -85,7 +83,7 @@ export const SITE_CONFIG: SiteConfig = {
  * Precedence:
  * 1. NEXT_PUBLIC_CANONICAL_URL (explicit production override)
  * 2. NEXT_PUBLIC_SITE_URL (configured deployment origin)
- * 3. Default fallback to https://www.hippocrates.in
+ * 3. Default fallback to https://hippocrates.in
  */
 export function getSiteUrl(): string {
   if (process.env.NEXT_PUBLIC_CANONICAL_URL) {

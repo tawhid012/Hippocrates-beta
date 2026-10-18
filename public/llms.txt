@@ -2,8 +2,7 @@
 
 > Hippocrates is an advanced healthcare AI platform delivering dual-engine intelligence: Aegis for patient health understanding and consultation preparation, and Oracle for physician clinical decision support and differential reasoning.
 
-Canonical Website: https://www.hippocrates.in
-Current Beta Deployment: https://hippocrates-beta.vercel.app
+Canonical Website: https://hippocrates.in
 
 ## Core Products
 
@@ -12,27 +11,27 @@ Current Beta Deployment: https://hippocrates-beta.vercel.app
 - Core Function: Translates complex medical terminology, provides structured symptom exploration, explains laboratory reports (e.g., CBC, lipid panels, thyroid profiles), and assists patients in preparing organized questions for clinical consultations.
 - Limitations & Safety: Aegis is strictly an educational and communication preparation tool. It does NOT diagnose medical conditions, prescribe medication, or handle medical emergencies.
 - Emergency Guidance: In cases of severe chest pain, shortness of breath, acute neurological deficits, or severe bleeding, patients are directed immediately to emergency medical services (108/112 in India, 911 in US) or the nearest emergency room.
-- URL: https://www.hippocrates.in/aegis
+- URL: https://hippocrates.in/aegis
 
 ### Oracle — Physician Clinical Copilot
 - Target Audience: Licensed physicians, residents, and verified healthcare providers.
 - Core Function: Augments clinician workflows through multi-model differential diagnostic reasoning, evidence-based guideline synthesis, clinical risk score computation (e.g., CRB-65, CURB-65, Wells criteria), and case documentation support.
 - Verification Requirement: Requires valid Medical Council Registration Number before granting clinical workspace access.
 - Non-Autonomous Safeguards: Oracle is a clinical decision support system (CDSS) designed to reduce cognitive fatigue and anchor bias; it does not replace the physician's independent clinical judgment.
-- URL: https://www.hippocrates.in/oracle
+- URL: https://hippocrates.in/oracle
 
 ## Public Information & Documentation
-- Platform Architecture: https://www.hippocrates.in/platform
-- For Patients Guide: https://www.hippocrates.in/for-patients
-- For Doctors Guide: https://www.hippocrates.in/for-doctors
-- Medical Report Explanations: https://www.hippocrates.in/medical-reports
-- Responsible AI & Safety Principles: https://www.hippocrates.in/safety
-- Knowledge Hub & Educational Articles: https://www.hippocrates.in/knowledge
-- About & Team: https://www.hippocrates.in/about
-- Medical Disclaimer: https://www.hippocrates.in/disclaimer
-- Privacy Practices: https://www.hippocrates.in/privacy
-- Terms of Service: https://www.hippocrates.in/terms
-- Contact: https://www.hippocrates.in/contact
+- Platform Architecture: https://hippocrates.in/platform
+- For Patients Guide: https://hippocrates.in/for-patients
+- For Doctors Guide: https://hippocrates.in/for-doctors
+- Medical Report Explanations: https://hippocrates.in/medical-reports
+- Responsible AI & Safety Principles: https://hippocrates.in/safety
+- Knowledge Hub & Educational Articles: https://hippocrates.in/knowledge
+- About & Team: https://hippocrates.in/about
+- Medical Disclaimer: https://hippocrates.in/disclaimer
+- Privacy Practices: https://hippocrates.in/privacy
+- Terms of Service: https://hippocrates.in/terms
+- Contact: https://hippocrates.in/contact
 
 ## Team & Organization
 - Founder & System Architecture Lead: Tawhidur Rahman Laskar

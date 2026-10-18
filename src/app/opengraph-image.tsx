@@ -88,7 +88,7 @@ export default async function Image() {
             <span>• Zero Health Data Monetization</span>
           </div>
           <span style={{ fontSize: "18px", color: "#60A5FA", fontWeight: 600 }}>
-            www.hippocrates.in
+            hippocrates.in
           </span>
         </div>
       </div>
