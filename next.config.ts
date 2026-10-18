@@ -46,14 +46,8 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/:path*",
-        has: [{ type: "host", value: "www.hippocrates.in" }],
-        destination: "https://hippocrates.in/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:path*",
         has: [{ type: "host", value: "hippocrates-beta.vercel.app" }],
-        destination: "https://hippocrates.in/:path*",
+        destination: "https://www.hippocrates.in/:path*",
         permanent: true,
       },
     ];

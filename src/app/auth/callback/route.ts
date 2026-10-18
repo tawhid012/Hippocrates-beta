@@ -13,20 +13,10 @@ export async function GET(request: NextRequest) {
   const redirectOriginParam = requestUrl.searchParams.get("redirect_origin");
 
   // Production origin detection strategy:
-  // 1. Explicitly configured public URL environment variable (Vercel, Netlify, Render, Railway, Custom)
-  const envUrl =
-    process.env.NEXT_PUBLIC_CANONICAL_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
-    process.env.RENDER_EXTERNAL_URL ||
-    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
+  let safeOrigin = "";
 
-  let safeOrigin = envUrl ? envUrl.replace(/\/$/, "") : "";
-
-  // 2. Validate redirect_origin param passed explicitly from client (window.location.origin)
-  if (!safeOrigin && redirectOriginParam) {
+  // 1. Validate redirect_origin param passed explicitly from client (window.location.origin)
+  if (redirectOriginParam) {
     try {
       const parsedOrigin = new URL(redirectOriginParam);
       if (
@@ -36,7 +26,23 @@ export async function GET(request: NextRequest) {
         safeOrigin = parsedOrigin.origin;
       }
     } catch {
-      // Invalid URL in query param, proceed to headers detection
+      // Invalid URL in query param, proceed to env detection
+    }
+  }
+
+  // 2. Explicitly configured public URL environment variable (Vercel, Render, Railway, Custom)
+  if (!safeOrigin) {
+    const envUrl =
+      process.env.NEXT_PUBLIC_CANONICAL_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+      process.env.RENDER_EXTERNAL_URL ||
+      (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
+
+    if (envUrl) {
+      safeOrigin = envUrl.replace(/\/$/, "");
     }
   }
 

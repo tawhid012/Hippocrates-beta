@@ -28,29 +28,19 @@ describe("Hippocrates SEO & Canonical Architecture Suite", () => {
     assert.equal(isPreview({ VERCEL_ENV: "production" }), false);
   });
 
-  test("Alternate domain redirects enforce canonical https://hippocrates.in", () => {
+  test("Beta deployment redirect routes to production without edge redirect loop", () => {
     const redirects = [
       {
         source: "/:path*",
-        has: [{ type: "host", value: "www.hippocrates.in" }],
-        destination: "https://hippocrates.in/:path*",
-        permanent: true,
-      },
-      {
-        source: "/:path*",
         has: [{ type: "host", value: "hippocrates-beta.vercel.app" }],
-        destination: "https://hippocrates.in/:path*",
+        destination: "https://www.hippocrates.in/:path*",
         permanent: true,
       },
     ];
 
-    assert.equal(redirects[0].has[0].value, "www.hippocrates.in");
-    assert.equal(redirects[0].destination, "https://hippocrates.in/:path*");
+    assert.equal(redirects[0].has[0].value, "hippocrates-beta.vercel.app");
+    assert.equal(redirects[0].destination, "https://www.hippocrates.in/:path*");
     assert.equal(redirects[0].permanent, true);
-
-    assert.equal(redirects[1].has[0].value, "hippocrates-beta.vercel.app");
-    assert.equal(redirects[1].destination, "https://hippocrates.in/:path*");
-    assert.equal(redirects[1].permanent, true);
   });
 });
 
