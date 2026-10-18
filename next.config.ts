@@ -49,8 +49,25 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/(icon.svg|favicon.ico|manifest.webmanifest|logo.jpg)",
+        source: "/(icon.svg|favicon.ico|manifest.webmanifest|logo.jpg|hippocrates-og.png|hippocrates-android-device.jpg)",
         headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+      {
+        source: "/HIPPOCRATES.apk",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/vnd.android.package-archive",
+          },
+          {
+            key: "Content-Disposition",
+            value: 'attachment; filename="Hippocrates.apk"',
+          },
           {
             key: "Cache-Control",
             value: "public, max-age=86400, stale-while-revalidate=604800",
@@ -71,6 +88,16 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      {
+        source: "/opengraph-image",
+        destination: "/hippocrates-og.png",
+        permanent: true,
+      },
+      {
+        source: "/download",
+        destination: "/get-started",
+        permanent: true,
+      },
       {
         source: "/:path*",
         has: [{ type: "host", value: "hippocrates-beta.vercel.app" }],

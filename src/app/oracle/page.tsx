@@ -16,26 +16,42 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Oracle — Physician Clinical Copilot & Differential Reasoning Engine",
+  title: "Oracle — Doctor-Focused Clinical Support & Decision Reasoning",
   description:
-    "Oracle is an advanced clinical AI copilot for doctors. Multi-model differential diagnostic reasoning, clinical risk stratification, evidence guidelines, and case documentation.",
+    "Explore Oracle by Hippocrates: a doctor-focused clinical copilot designed to support clinical workflows, differential reasoning, and documentation for verified clinicians.",
   keywords: [
     "Hippocrates Oracle",
     "AI clinical copilot",
     "clinical decision support software",
-    "AI tools for doctors",
-    "differential diagnosis software",
+    "doctor-focused clinical support",
+    "differential diagnosis reasoning",
     "clinical documentation AI",
-    "physician copilot",
+    "physician workflow copilot",
   ],
   alternates: {
     canonical: "/oracle",
   },
   openGraph: {
-    title: "Oracle — Physician Clinical Copilot & Differential Reasoning Engine",
+    title: "Oracle — Doctor-Focused Clinical Support & Decision Reasoning",
     description:
-      "Augment clinical decision-making with multi-model differential reasoning, risk stratification, and documentation assistance. Verified physician access only.",
+      "Explore Oracle by Hippocrates: a doctor-focused clinical copilot designed to support clinical workflows, differential reasoning, and documentation for verified clinicians.",
     url: "/oracle",
+    images: [
+      {
+        url: "/hippocrates-og.png",
+        width: 1024,
+        height: 536,
+        alt: "Oracle by Hippocrates — Doctor-Focused Clinical Support",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Oracle — Doctor-Focused Clinical Support & Decision Reasoning",
+    description:
+      "Explore Oracle by Hippocrates: a doctor-focused clinical copilot designed to support clinical workflows, differential reasoning, and documentation for verified clinicians.",
+    images: ["/hippocrates-og.png"],
   },
 };
 

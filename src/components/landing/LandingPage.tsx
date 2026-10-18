@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { LandingHeroVisual } from "./LandingHeroVisual";
+import { AppDownloadSection } from "./AppDownloadSection";
 import dynamic from "next/dynamic";
 
 const GetStartedModal = dynamic(
@@ -651,6 +652,9 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
           </div>
         </div>
       </section>
+
+      {/* 12. SECTION 11 — DEDICATED APP DOWNLOAD */}
+      <AppDownloadSection />
 
       </div>
 

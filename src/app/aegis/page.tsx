@@ -16,26 +16,42 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Aegis — Patient Health Intelligence & Medical Report Explainer",
+  title: "Aegis — Patient-Focused Health Information & Guidance",
   description:
-    "Meet Aegis by Hippocrates: a calm, empathetic AI health assistant that translates medical jargon, explains blood test reports, and helps you prepare questions for your doctor.",
+    "Explore Aegis by Hippocrates: a patient-focused assistant designed to help people understand health information, translate medical reports, and access appropriate health guidance.",
   keywords: [
     "Hippocrates Aegis",
-    "AI health assistant",
+    "Aegis health assistant",
+    "patient health information",
     "medical report explanation",
     "understanding blood test reports",
     "preparing questions for a doctor",
-    "health information explained simply",
-    "Aegis health intelligence",
+    "accessible health awareness",
   ],
   alternates: {
     canonical: "/aegis",
   },
   openGraph: {
-    title: "Aegis — Patient Health Intelligence & Medical Report Explainer",
+    title: "Aegis — Patient-Focused Health Information & Guidance",
     description:
-      "Understand your health and lab results with clarity. Empathetic symptom exploration and consultation preparation powered by Hippocrates AI.",
+      "Explore Aegis by Hippocrates: a patient-focused assistant designed to help people understand health information, translate medical reports, and access appropriate health guidance.",
     url: "/aegis",
+    images: [
+      {
+        url: "/hippocrates-og.png",
+        width: 1024,
+        height: 536,
+        alt: "Aegis by Hippocrates — Patient-Focused Health Information and Guidance",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Aegis — Patient-Focused Health Information & Guidance",
+    description:
+      "Explore Aegis by Hippocrates: a patient-focused assistant designed to help people understand health information, translate medical reports, and access appropriate health guidance.",
+    images: ["/hippocrates-og.png"],
   },
 };
 

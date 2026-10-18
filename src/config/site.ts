@@ -42,10 +42,10 @@ export interface SiteConfig {
 export const SITE_CONFIG: SiteConfig = {
   name: "Hippocrates",
   legalName: "Hippocrates AI Health Technologies",
-  tagline: "Dual-Engine Clinical Intelligence Platform",
+  tagline: "AI for Better-Informed Healthcare",
   description:
-    "Hippocrates is an advanced healthcare AI platform delivering dual-engine intelligence: Aegis for patient health understanding and consultation preparation, and Oracle for physician clinical decision support and differential reasoning.",
-  productionDomain: "https://hippocrates.in",
+    "Discover Hippocrates, an AI-powered healthcare ecosystem featuring Aegis for patient-focused health information and report understanding, and Oracle for doctor-focused clinical support. Built around a vision of AI for Accessible Health Awareness.",
+  productionDomain: "https://www.hippocrates.in",
   socials: {
     github: "https://github.com/tawhid012/Hippocrates-beta",
     twitter: "https://twitter.com/hippocrates_ai",

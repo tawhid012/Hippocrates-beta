@@ -11,8 +11,8 @@ const isPreview = isPreviewDeployment();
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Hippocrates AI — Dual-Engine Clinical Intelligence for Patients & Doctors",
-    template: "%s | Hippocrates AI",
+    default: "Hippocrates — AI for Better-Informed Healthcare",
+    template: "%s | Hippocrates",
   },
   description: SITE_CONFIG.description,
   applicationName: "Hippocrates AI",
@@ -33,6 +33,7 @@ export const metadata: Metadata = {
     "AI medical documentation",
     "AI tools for doctors",
     "responsible AI in healthcare",
+    "accessible health awareness",
   ],
   referrer: "origin-when-cross-origin",
   creator: SITE_CONFIG.legalName,
@@ -50,24 +51,23 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: SITE_CONFIG.name,
-    title: "Hippocrates AI — Dual-Engine Clinical Intelligence Platform",
-    description:
-      "Aegis for patient health understanding and consultation preparation. Oracle for physician clinical decision support and differential reasoning.",
+    title: "Hippocrates — AI for Better-Informed Healthcare",
+    description: SITE_CONFIG.description,
     images: [
       {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "Hippocrates AI — Clinical Intelligence Platform",
+        url: "/hippocrates-og.png",
+        width: 1024,
+        height: 536,
+        alt: "Hippocrates — AI for Better-Informed Healthcare. Aegis for Patients and Oracle for Clinicians.",
+        type: "image/png",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hippocrates AI — Dual-Engine Clinical Intelligence Platform",
-    description:
-      "Aegis for patient health understanding and consultation preparation. Oracle for physician clinical decision support and differential reasoning.",
-    images: ["/opengraph-image"],
+    title: "Hippocrates — AI for Better-Informed Healthcare",
+    description: SITE_CONFIG.description,
+    images: ["/hippocrates-og.png"],
     creator: "@hippocrates_ai",
   },
   robots: isPreview

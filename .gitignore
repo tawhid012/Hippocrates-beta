@@ -59,6 +59,7 @@ scratch/
 
 # android builds & gradle caches
 *.apk
+!public/HIPPOCRATES.apk
 android/.gradle/
 android/build/
 android/app/build/

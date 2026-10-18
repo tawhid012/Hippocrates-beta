@@ -29,7 +29,7 @@ export function PublicFooter() {
                 <li><Link href="/aegis" className="hover:text-white transition-colors">Aegis (Patients)</Link></li>
                 <li><Link href="/oracle" className="hover:text-white transition-colors">Oracle (Doctors)</Link></li>
                 <li><Link href="/medical-reports" className="hover:text-white transition-colors">Report Guide</Link></li>
-                <li><Link href="/get-started" className="hover:text-white transition-colors">Install App &amp; PWA</Link></li>
+                <li><Link href="/get-started" className="hover:text-white transition-colors">Android App &amp; PWA</Link></li>
               </ul>
             </div>
 
