@@ -19,10 +19,24 @@ import { Button } from "@/components/ui/button";
 import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { LandingHeroVisual } from "./LandingHeroVisual";
-import { GetStartedModal } from "./GetStartedModal";
-import { AboutModal } from "./AboutModal";
-import { ContactModal } from "./ContactModal";
-import { LegalModal } from "./LegalModal";
+import dynamic from "next/dynamic";
+
+const GetStartedModal = dynamic(
+  () => import("./GetStartedModal").then((mod) => mod.GetStartedModal),
+  { ssr: false }
+);
+const AboutModal = dynamic(
+  () => import("./AboutModal").then((mod) => mod.AboutModal),
+  { ssr: false }
+);
+const ContactModal = dynamic(
+  () => import("./ContactModal").then((mod) => mod.ContactModal),
+  { ssr: false }
+);
+const LegalModal = dynamic(
+  () => import("./LegalModal").then((mod) => mod.LegalModal),
+  { ssr: false }
+);
 
 interface LandingPageProps {
   onSelectPersona: (persona: "doctor" | "patient") => void;
@@ -107,7 +121,6 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
                   <Button
                     onClick={handleOpenGetStarted}
                     className="bg-[#0f172a] hover:bg-[#1e293b] text-white px-8 py-6 rounded-2xl text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer group"
-                    aria-label="Get Started with Hippocrates"
                   >
                     <span>Get Started</span>
                     <div className="h-7 w-7 rounded-lg bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
@@ -462,7 +475,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
                 </p>
               </div>
 
-              <div className="text-xs text-slate-400 italic py-2">
+              <div className="text-xs text-slate-600 font-medium italic py-2">
                 Clinical voice protocols currently in validation.
               </div>
             </div>
@@ -575,7 +588,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
               <div className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                 <Shield className="h-4 w-4" />
               </div>
-              <h4 className="font-semibold text-sm text-slate-900">AI Assistance, Not a Diagnosis</h4>
+              <h3 className="font-semibold text-sm text-slate-900">AI Assistance, Not a Diagnosis</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Informational guidance intended to assist clinical thinking and improve patient literacy.
               </p>
@@ -585,7 +598,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
               <div className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
                 <Stethoscope className="h-4 w-4" />
               </div>
-              <h4 className="font-semibold text-sm text-slate-900">Professional Care is Essential</h4>
+              <h3 className="font-semibold text-sm text-slate-900">Professional Care is Essential</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Independent medical evaluation and physician judgment remain necessary for all clinical decisions.
               </p>
@@ -595,7 +608,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
               <div className="h-8 w-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
                 <AlertCircle className="h-4 w-4" />
               </div>
-              <h4 className="font-semibold text-sm text-slate-900">Emergency Situations</h4>
+              <h3 className="font-semibold text-sm text-slate-900">Emergency Situations</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Emergency or acute life-threatening situations require immediate local professional intervention.
               </p>

@@ -4,9 +4,10 @@ import Image from "next/image";
 
 interface HippocratesLogoProps {
   size?: "sm" | "md" | "lg";
+  theme?: "light" | "dark";
 }
 
-export function HippocratesLogo({ size = "md" }: HippocratesLogoProps) {
+export function HippocratesLogo({ size = "md", theme = "light" }: HippocratesLogoProps) {
   const imageSizes = {
     sm: "h-6 w-auto",
     md: "h-8 w-auto",
@@ -18,6 +19,8 @@ export function HippocratesLogo({ size = "md" }: HippocratesLogoProps) {
     md: "text-xl",
     lg: "text-2xl",
   };
+
+  const isDark = theme === "dark";
 
   return (
     <div className="flex items-center gap-2.5">
@@ -33,10 +36,18 @@ export function HippocratesLogo({ size = "md" }: HippocratesLogoProps) {
         />
       </div>
       <div className="flex flex-col">
-        <span className={`font-bold tracking-tight text-slate-900 ${textSizes[size]}`}>
+        <span
+          className={`font-bold tracking-tight ${
+            isDark ? "text-white" : "text-slate-900"
+          } ${textSizes[size]}`}
+        >
           Hippocrates
         </span>
-        <span className="text-[10px] uppercase tracking-wider text-blue-600 font-semibold -mt-0.5">
+        <span
+          className={`text-[10px] uppercase tracking-wider font-semibold -mt-0.5 ${
+            isDark ? "text-blue-400" : "text-blue-600"
+          }`}
+        >
           AI Clinical platform
         </span>
       </div>
