@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (supabaseUrl && supabaseAnonKey) {
-      let pendingCookies: Array<{ name: string; value: string; options?: any }> = [];
+      let pendingCookies: Array<{ name: string; value: string; options?: Record<string, unknown> }> = [];
       const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
         cookies: {
           getAll() {
