@@ -1,33 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Menu, SquarePen } from "lucide-react";
+import { Menu, Stethoscope, HeartPulse, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/hooks/useAppContext";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { useAuth } from "@/context/AuthContext";
+import { UserMenu } from "@/components/auth/UserMenu";
 
-interface HeaderProps {
-  onNewCase?: () => void;
-}
-
-export function Header({ onNewCase }: HeaderProps) {
+export function Header() {
   const { toggleSidebar, persona, selectPersona } = useApp();
-
-  const handleMenuClick = () => {
-    try {
-      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-    } catch {}
-    toggleSidebar();
-  };
-
-  const handleNewChatClick = () => {
-    try {
-      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-    } catch {}
-    if (onNewCase) {
-      onNewCase();
-    }
-  };
+  const { doctorRegistrationNumber } = useAuth();
 
   const handleLogoClick = () => {
     if (persona) {
@@ -36,57 +18,74 @@ export function Header({ onNewCase }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 w-full items-center justify-between px-3 pt-[env(safe-area-inset-top)] sm:px-4 border-b border-border/70 bg-[var(--appbar-bg)] backdrop-blur-xl select-none transition-colors">
-      {/* Left: Drawer Toggle */}
-      <div className="flex items-center">
+    <header className="premium-hairline sticky top-0 z-[70] grid min-h-[68px] grid-cols-[auto_1fr_auto] items-center gap-2 px-3 py-2 sm:px-4 sm:gap-3 lg:px-6 backdrop-blur-2xl bg-white/60">
+      {/* Left — sidebar toggle + brand */}
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <Button
-          variant="ghost"
+          variant="glass"
           size="icon-sm"
-          className="h-9 w-9 rounded-full text-foreground/80 hover:text-foreground hover:bg-muted active:scale-95 transition-all"
-          onClick={handleMenuClick}
-          aria-label="Open chat drawer"
+          className="shrink-0 rounded-xl"
+          onClick={toggleSidebar}
+          aria-label="Toggle sidebar"
         >
-          <Menu className="h-5 w-5" strokeWidth={2} />
+          <Menu className="h-5 w-5" strokeWidth={1.75} />
         </Button>
+
+        <button
+          onClick={handleLogoClick}
+          aria-label="Hippocrates home"
+          className="group flex min-w-0 items-center gap-2.5 transition-opacity duration-200 hover:opacity-90 text-left select-none cursor-pointer"
+        >
+          <div className="relative shrink-0 flex items-center justify-center">
+            <Image
+              src="/logo.jpg"
+              alt="Hippocrates Logo"
+              width={48}
+              height={32}
+              className="h-7 sm:h-8 w-auto object-contain select-none rounded-md"
+              priority
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div className="flex flex-col justify-center leading-none">
+            <span className="text-base font-semibold tracking-tight text-slate-900 font-sans">
+              Hippocrates
+            </span>
+            <span className="text-[7px] font-medium uppercase tracking-[0.22em] text-slate-400 mt-1 font-sans">
+              AI CLINICAL PLATFORM
+            </span>
+          </div>
+        </button>
+
+        {persona && (
+          <div className="hidden md:flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100/90 text-slate-800 border border-slate-200/80">
+            {persona === "doctor" ? (
+              <>
+                <Stethoscope className="h-3.5 w-3.5 text-hippo-navy" />
+                <span>Doctor Mode • Oracle</span>
+                {doctorRegistrationNumber && (
+                  <span className="inline-flex items-center gap-1 ml-1 pl-1.5 border-l border-slate-300 text-[10px] text-emerald-700 font-mono font-semibold">
+                    <BadgeCheck className="h-3 w-3 text-emerald-600" />
+                    <span>#{doctorRegistrationNumber}</span>
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <HeartPulse className="h-3.5 w-3.5 text-hippo-blue" />
+                <span>Patient Mode • Aegis</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Center: Clean Brand Logo */}
-      <button
-        onClick={handleLogoClick}
-        aria-label="Hippocrates Home"
-        className="flex items-center gap-2 group cursor-pointer active:scale-95 transition-transform"
-      >
-        <div className="relative h-7 w-7 sm:h-7.5 sm:w-7.5 rounded-lg overflow-hidden border border-border/80 shadow-2xs shrink-0">
-          <Image
-            src="/logo.jpg"
-            alt="Hippocrates Logo"
-            width={30}
-            height={30}
-            className="h-full w-full object-cover"
-            priority
-          />
-        </div>
-        <span className="font-bold text-sm sm:text-[15px] tracking-tight text-foreground font-sans">
-          Hippocrates
-        </span>
-      </button>
+      {/* Center — empty spacer */}
+      <div aria-hidden />
 
-      {/* Right: New Consultation Action Shortcut */}
-      <div className="flex items-center">
-        {onNewCase ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleNewChatClick}
-            aria-label="Start new consultation"
-            title="New Chat"
-            className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted active:scale-95 transition-all"
-          >
-            <SquarePen className="h-4.5 w-4.5" strokeWidth={2} />
-          </Button>
-        ) : (
-          <div className="w-9" />
-        )}
+      {/* Right — User Account Menu (100% separated) */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <UserMenu />
       </div>
     </header>
   );

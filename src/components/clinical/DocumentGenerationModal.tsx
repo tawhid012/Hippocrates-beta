@@ -18,7 +18,6 @@ import {
 import type { NormalizedClinicalSummary, GenerationState, ModelType } from "@/lib/clinical/types";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
 import { loadConsultationState } from "@/lib/consultation/consultationStorage";
-import { resolveApiUrl } from "@/lib/api-client";
 
 interface DocumentGenerationModalProps {
   isOpen: boolean;
@@ -106,7 +105,7 @@ export function DocumentGenerationModal({
   // Load from database if a valid active case ID is present
   useEffect(() => {
     if (isOpen && conversationId && conversationId.length > 5) {
-      fetch(resolveApiUrl(`/api/cases/${conversationId}`))
+      fetch(`/api/cases/${conversationId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data?.case?.metadata?.patientInfo) {
@@ -252,7 +251,7 @@ export function DocumentGenerationModal({
 
       const effectiveCaseState = caseStateProp || (conversationId ? loadConsultationState(conversationId)?.caseState : undefined);
 
-      const res = await fetch(resolveApiUrl("/api/clinical/generate-summary"), {
+      const res = await fetch("/api/clinical/generate-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -311,7 +310,7 @@ export function DocumentGenerationModal({
     // Persist patient-info in database
     if (conversationId && conversationId.length > 5) {
       try {
-        await fetch(resolveApiUrl(`/api/cases/${conversationId}/patient-info`), {
+        await fetch(`/api/cases/${conversationId}/patient-info`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(patientData),
@@ -330,7 +329,7 @@ export function DocumentGenerationModal({
     setIsDownloading(true);
 
     try {
-      const res = await fetch(resolveApiUrl("/api/clinical/generate-pdf"), {
+      const res = await fetch("/api/clinical/generate-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summary }),
@@ -341,35 +340,10 @@ export function DocumentGenerationModal({
       }
 
       const blob = await res.blob();
-      const filename = `Hippocrates_Clinical_Summary_${summary.documentId || "doc"}.pdf`;
-
-      // Native mobile share sheet support (Android & iOS)
-      if (typeof navigator !== "undefined" && navigator.share) {
-        try {
-          const file = new File([blob], filename, { type: "application/pdf" });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: "Hippocrates Clinical Summary",
-              text: `Clinical Summary: ${summary.conversationTitle || summary.consultationReason || "Patient Health Assessment"}`,
-            });
-            setIsDownloading(false);
-            return;
-          }
-        } catch (shareErr) {
-          // User dismissed share dialog
-          if (shareErr instanceof Error && shareErr.name === "AbortError") {
-            setIsDownloading(false);
-            return;
-          }
-        }
-      }
-
-      // Standard desktop download
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename;
+      a.download = `Hippocrates_Clinical_Summary_${summary.documentId || "doc"}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -394,19 +368,19 @@ export function DocumentGenerationModal({
           initial={{ opacity: 0, y: 15, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 15, scale: 0.98 }}
-          className="relative w-full max-w-lg rounded-3xl bg-card border border-border backdrop-blur-xl shadow-2xl overflow-hidden p-6 space-y-6 text-foreground"
+          className="relative w-full max-w-lg rounded-3xl bg-white/80 border border-white/90 backdrop-blur-xl shadow-[0_32px_80px_-16px_rgba(26,39,68,0.12)] overflow-hidden p-6 space-y-6 text-slate-800"
         >
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-4">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200/50 pb-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-500">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-600">
                 <Shield className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-base font-serif font-bold text-foreground tracking-tight">
+                <h2 className="text-base font-serif font-bold text-slate-900 tracking-tight">
                   Clinical Summary & Care Plan
                 </h2>
-                <p className="text-xs text-muted-foreground font-medium">
+                <p className="text-xs text-slate-500 font-medium">
                   AI-Assisted Patient Document Generator
                 </p>
               </div>
@@ -415,7 +389,7 @@ export function DocumentGenerationModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100/60 transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
@@ -474,12 +448,12 @@ export function DocumentGenerationModal({
                       placeholder="e.g. Jane Doe"
                       value={patientData.name}
                       onChange={(e) => setPatientData(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-2 bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                       Age *
                     </label>
                     <input
@@ -488,24 +462,24 @@ export function DocumentGenerationModal({
                       placeholder="e.g. 42"
                       value={patientData.age}
                       onChange={(e) => setPatientData(prev => ({ ...prev, age: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-2 bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                       Sex *
                     </label>
                     <select
                       required
                       value={patientData.sex}
                       onChange={(e) => setPatientData(prev => ({ ...prev, sex: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-2 bg-muted/50 text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500"
                     >
-                      <option value="" className="bg-card text-foreground">Select...</option>
-                      <option value="Male" className="bg-card text-foreground">Male</option>
-                      <option value="Female" className="bg-card text-foreground">Female</option>
-                      <option value="Other" className="bg-card text-foreground">Other</option>
+                      <option value="">Select...</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
                 </div>
@@ -513,48 +487,48 @@ export function DocumentGenerationModal({
                 {/* Optional Clinical Context fields */}
                 <div className="space-y-2.5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      Prior Medical History <span className="text-muted-foreground/70 font-normal">(Optional)</span>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Prior Medical History <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <textarea
                       placeholder="e.g. Hypertension, Type-2 Diabetes"
                       value={patientData.history}
                       onChange={(e) => setPatientData(prev => ({ ...prev, history: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-1.5 h-14 bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-1.5 h-14 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      Current Medications <span className="text-muted-foreground/70 font-normal">(Optional)</span>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Current Medications <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <textarea
                       placeholder="e.g. Metformin 500mg daily"
                       value={patientData.medications}
                       onChange={(e) => setPatientData(prev => ({ ...prev, medications: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-1.5 h-14 bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-1.5 h-14 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                      Known Allergies <span className="text-muted-foreground/70 font-normal">(Optional)</span>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      Known Allergies <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <textarea
                       placeholder="e.g. Penicillin, Pollen"
                       value={patientData.allergies}
                       onChange={(e) => setPatientData(prev => ({ ...prev, allergies: e.target.value }))}
-                      className="w-full text-xs rounded-xl border border-border px-3 py-1.5 h-14 bg-muted/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                      className="w-full text-xs rounded-xl border border-slate-200 px-3 py-1.5 h-14 bg-white/50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-500 resize-none"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-3 border-t border-border/60">
+              <div className="pt-2 flex justify-end gap-3 border-t border-slate-200/40">
                 <button
                   type="button"
                   onClick={() => setIsCollectingBiodata(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-border hover:bg-muted text-foreground transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold border border-slate-200 hover:bg-slate-100/60 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -693,42 +667,45 @@ export function DocumentGenerationModal({
                 </span>
               </div>
 
-              {/* Upgraded Document Preview Card */}
-              <div className="p-5 rounded-3xl border border-border bg-muted/40 backdrop-blur-md shadow-sm space-y-4 relative overflow-hidden">
-                <div className="border-b border-border/60 pb-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {/* Upgraded Glassmorphic Document Preview Card */}
+              <div className="p-5 rounded-3xl border border-white/90 bg-white/80 backdrop-blur-md shadow-[0_16px_40px_-8px_rgba(26,39,68,0.06)] space-y-4 relative overflow-hidden">
+                {/* Subtle soft gradient background glow inside the glass card */}
+                <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-emerald-400/5 blur-2xl pointer-events-none" />
+                
+                <div className="border-b border-slate-200/40 pb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Generated Document Title
                   </p>
-                  <p className="text-base font-bold text-foreground font-serif mt-0.5 leading-snug">
+                  <p className="text-base font-bold text-slate-900 font-serif mt-0.5 leading-snug">
                     {summary.conversationTitle || "Clinical Conversation Summary & Care Plan"}
                   </p>
                 </div>
 
-                {/* Sub panel of details */}
+                {/* Sub glass panel of details */}
                 <div className="grid grid-cols-3 gap-3 text-left">
-                  <div className="p-3 rounded-2xl bg-card border border-border shadow-xs">
-                    <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="p-3 rounded-2xl bg-white/65 border border-slate-100 shadow-[0_2px_8px_rgba(26,39,68,0.01)]">
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
                       Patient
                     </span>
-                    <span className="block text-xs font-bold text-foreground truncate mt-0.5">
+                    <span className="block text-xs font-bold text-slate-850 truncate mt-0.5">
                       {summary.patient?.name || "Not specified"}
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-card border border-border shadow-xs">
-                    <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="p-3 rounded-2xl bg-white/65 border border-slate-100 shadow-[0_2px_8px_rgba(26,39,68,0.01)]">
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
                       Age / Sex
                     </span>
-                    <span className="block text-xs font-bold text-foreground truncate mt-0.5">
+                    <span className="block text-xs font-bold text-slate-850 truncate mt-0.5">
                       {summary.patient?.age && summary.patient?.sex ? `${summary.patient.age} / ${summary.patient.sex}` : "Not specified"}
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-card border border-border shadow-xs">
-                    <span className="block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="p-3 rounded-2xl bg-white/65 border border-slate-100 shadow-[0_2px_8px_rgba(26,39,68,0.01)]">
+                    <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
                       Key Concern
                     </span>
-                    <span className="block text-xs font-bold text-foreground truncate mt-0.5">
+                    <span className="block text-xs font-bold text-slate-850 truncate mt-0.5">
                       {summary.symptoms?.primarySymptom || summary.consultationReason || "General inquiry"}
                     </span>
                   </div>
@@ -736,19 +713,19 @@ export function DocumentGenerationModal({
 
                 {/* Badges for generated sections */}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                  <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                  <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-700 font-semibold border border-emerald-500/10">
                     Care Guidance
                   </span>
-                  <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                  <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-700 font-semibold border border-emerald-500/10">
                     Clinical Analysis
                   </span>
                   {summary.drNote && (
-                    <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                    <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-700 font-semibold border border-emerald-500/10">
                       Dr. Note Included
                     </span>
                   )}
                   {summary.medicationDiscussion && (
-                    <span className="text-[10px] px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/20">
+                    <span className="text-[10px] px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-700 font-semibold border border-blue-500/10">
                       Medication Info
                     </span>
                   )}
@@ -756,8 +733,8 @@ export function DocumentGenerationModal({
               </div>
 
               {summary.missingInformationNotice && (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2.5 shadow-sm">
-                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/10 text-amber-800 text-xs flex items-start gap-2.5 shadow-sm">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
                   <p className="leading-relaxed">{summary.missingInformationNotice}</p>
                 </div>
               )}
@@ -767,9 +744,9 @@ export function DocumentGenerationModal({
                 <button
                   type="button"
                   onClick={() => setIsPreviewOpen(true)}
-                  className="h-12 rounded-2xl border border-border bg-card hover:bg-muted text-foreground font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:scale-[1.01] active:scale-[0.99]"
+                  className="h-12 rounded-2xl border border-slate-200 bg-white/80 hover:bg-slate-100/80 text-slate-800 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:scale-[1.01] active:scale-[0.99] backdrop-blur-sm"
                 >
-                  <Eye className="h-4 w-4 text-emerald-500" />
+                  <Eye className="h-4 w-4 text-emerald-600" />
                   <span>View Document</span>
                 </button>
 

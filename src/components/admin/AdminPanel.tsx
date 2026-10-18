@@ -498,11 +498,7 @@ export function AdminPanel() {
             <button
               type="button"
               onClick={() => setAutoRefresh((prev) => !prev)}
-              title={
-                autoRefresh
-                  ? `Real-time live sync active (5s interval). Last synced at ${lastRefreshedAt.toLocaleTimeString()}. Click to pause.`
-                  : `Real-time sync paused. Last synced at ${lastRefreshedAt.toLocaleTimeString()}. Click to enable 5s live polling.`
-              }
+              title={autoRefresh ? "Real-time live sync active (5s interval). Click to pause." : "Real-time sync paused. Click to enable 5s live polling."}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer select-none",
                 autoRefresh

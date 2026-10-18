@@ -2,55 +2,116 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { AppProvider } from "@/hooks/useAppContext";
-import { ThemeProvider } from "@/context/ThemeContext";
+import { SITE_CONFIG, getSiteUrl, isPreviewDeployment } from "@/config/site";
+import { JsonLd, getOrganizationJsonLd, getWebSiteJsonLd } from "@/components/seo/JsonLd";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://hippocrates.ai";
+const siteUrl = getSiteUrl();
+const isPreview = isPreviewDeployment();
 
 export const metadata: Metadata = {
-  metadataBase: new URL(appUrl),
-  title: "Hippocrates AI — Clinical Intelligence Platform",
-  description: "AI-powered clinical intelligence platform for doctors and patients. Real-time diagnostic assistance, automated consultation documentation, and emergency escalation.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Hippocrates AI — Dual-Engine Clinical Intelligence for Patients & Doctors",
+    template: "%s | Hippocrates AI",
+  },
+  description: SITE_CONFIG.description,
   applicationName: "Hippocrates AI",
-  keywords: ["Hippocrates AI", "clinical intelligence", "medical AI", "clinical decision support", "voice copilot", "doctor consultation"],
-  icons: {
-    icon: [
-      { url: "/logo.png", type: "image/png" },
-      { url: "/logo.jpg", type: "image/jpeg" },
-    ],
-    apple: [
-      { url: "/logo.png", type: "image/png" },
-    ],
+  authors: SITE_CONFIG.founders.map((f) => ({ name: f.name })),
+  generator: "Next.js",
+  keywords: [
+    "Hippocrates AI",
+    "Hippocrates healthcare AI",
+    "Hippocrates app",
+    "Hippocrates Aegis",
+    "Hippocrates Oracle",
+    "AI clinical copilot",
+    "AI health assistant",
+    "medical report explanation",
+    "understanding blood test reports",
+    "preparing questions for a doctor",
+    "clinical decision support software",
+    "AI medical documentation",
+    "AI tools for doctors",
+    "responsible AI in healthcare",
+  ],
+  referrer: "origin-when-cross-origin",
+  creator: SITE_CONFIG.legalName,
+  publisher: SITE_CONFIG.legalName,
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  alternates: {
+    canonical: "./",
   },
   openGraph: {
-    title: "Hippocrates AI — Clinical Intelligence Platform",
-    description: "AI-powered clinical intelligence for doctors and patients. Real-time diagnostic assistance and ambient consultation documentation.",
-    siteName: "Hippocrates AI",
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    siteName: SITE_CONFIG.name,
+    title: "Hippocrates AI — Dual-Engine Clinical Intelligence Platform",
+    description:
+      "Aegis for patient health understanding and consultation preparation. Oracle for physician clinical decision support and differential reasoning.",
     images: [
       {
-        url: "/logo.png",
-        width: 1024,
-        height: 1024,
-        alt: "Hippocrates AI Clinical Intelligence Logo",
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Hippocrates AI — Clinical Intelligence Platform",
       },
     ],
-    locale: "en_US",
-    type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hippocrates AI — Clinical Intelligence Platform",
-    description: "AI-powered clinical intelligence for doctors and patients.",
-    images: ["/logo.png"],
+    title: "Hippocrates AI — Dual-Engine Clinical Intelligence Platform",
+    description:
+      "Aegis for patient health understanding and consultation preparation. Oracle for physician clinical decision support and differential reasoning.",
+    images: ["/opengraph-image"],
+    creator: "@hippocrates_ai",
+  },
+  robots: isPreview
+    ? {
+        index: false,
+        follow: false,
+      }
+    : {
+        index: true,
+        follow: true,
+        nocache: false,
+        googleBot: {
+          index: true,
+          follow: true,
+          noimageindex: false,
+          "max-video-preview": -1,
+          "max-image-preview": "large",
+          "max-snippet": -1,
+        },
+      },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/logo.jpg", sizes: "32x32", type: "image/jpeg" },
+    ],
+    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
+  },
+  manifest: "/manifest.webmanifest",
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+    other: {
+      ...(process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION && {
+        "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION,
+      }),
+    },
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#fcfdfe",
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -58,51 +119,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <html lang="en" className="h-full h-[100dvh] w-full overflow-hidden" suppressHydrationWarning>
-      <head>
-        {/* Anti-flash early theme detection & crypto.randomUUID polyfill */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var savedTheme = localStorage.getItem("hippocrates-theme");
-                var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                var shouldUseDark = savedTheme === "dark" || ((!savedTheme || savedTheme === "system") && prefersDark);
-                if (shouldUseDark) {
-                  document.documentElement.classList.add("dark");
-                  document.documentElement.style.colorScheme = "dark";
-                } else {
-                  document.documentElement.classList.remove("dark");
-                  document.documentElement.style.colorScheme = "light";
-                }
-              } catch (e) {}
+  const organizationJsonLd = getOrganizationJsonLd();
+  const webSiteJsonLd = getWebSiteJsonLd();
 
-              if (typeof window !== "undefined") {
-                if (!window.crypto) window.crypto = {};
-                if (typeof window.crypto.randomUUID !== "function") {
-                  window.crypto.randomUUID = function() {
-                    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-                      var r = Math.random() * 16 | 0;
-                      var v = c === "x" ? r : (r & 0x3 | 0x8);
-                      return v.toString(16);
-                    });
-                  };
-                }
-              }
-            `,
-          }}
-        />
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <JsonLd schema={organizationJsonLd} />
+        <JsonLd schema={webSiteJsonLd} />
       </head>
-      <body
-        className="h-full h-[100dvh] w-full overflow-hidden select-none overscroll-none antialiased bg-background text-foreground"
-        suppressHydrationWarning
-      >
-        <ThemeProvider>
-          <AuthProvider>
-            <AppProvider>{children}</AppProvider>
-          </AuthProvider>
-        </ThemeProvider>
+      <body className="min-h-full antialiased bg-[#fcfdfe] text-slate-900" suppressHydrationWarning>
+        <AuthProvider>
+          <AppProvider>{children}</AppProvider>
+        </AuthProvider>
       </body>
     </html>
   );

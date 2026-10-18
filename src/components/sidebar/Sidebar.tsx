@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
+  Search,
+  Settings,
   MessageSquare,
   X,
   Loader2,
@@ -13,16 +15,14 @@ import {
   Trash2,
   Check,
   SquarePen,
-  ChevronRight,
-  User,
+  Pin,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CaseSummary } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useApp } from "@/hooks/useAppContext";
-import { useAuth } from "@/context/AuthContext";
-import { formatUserIdentifier } from "@/lib/auth/phoneUtils";
 import { CasesListSkeleton } from "@/components/skeletons/CasesListSkeleton";
 import {
   DropdownMenu,
@@ -30,7 +30,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,13 +61,61 @@ function formatCaseTitle(title: string): string {
   return title;
 }
 
-const triggerHaptic = async () => {
-  try {
-    await Haptics.impact({ style: ImpactStyle.Light });
-  } catch {
-    // safe on web
+// ---------------------------------------------------------------------------
+// Sidebar Nav Item
+// ---------------------------------------------------------------------------
+
+interface NavItemProps {
+  icon: LucideIcon;
+  label: string;
+  onClick?: () => void;
+  href?: string;
+  active?: boolean;
+}
+
+function SidebarNavItem({ icon: Icon, label, onClick, href, active }: NavItemProps) {
+  const className = cn(
+    "group relative flex w-full items-center gap-3 rounded-[14px] px-3.5 py-2.5 text-[13px] font-medium tracking-[-0.005em]",
+    "transition-all duration-200 ease-out cursor-pointer",
+    active
+      ? "bg-white/76 text-foreground shadow-[0_12px_30px_rgba(26,39,68,0.065)] ring-1 ring-hippo-navy/[0.055]"
+      : "text-muted-foreground hover:-translate-y-px hover:bg-white/60 hover:text-foreground hover:shadow-[0_10px_26px_rgba(26,39,68,0.045)]"
+  );
+
+  const content = (
+    <>
+      {active && (
+        <motion.div
+          layoutId="sidebar-active"
+          className="absolute inset-0 rounded-[14px] bg-white/76 ring-1 ring-hippo-navy/[0.055]"
+          transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
+        />
+      )}
+      <Icon
+        className={cn(
+          "relative h-[17px] w-[17px] shrink-0 transition-all duration-200 group-hover:scale-[1.04]",
+          active ? "text-accent" : "text-muted-foreground/70 group-hover:text-foreground/80"
+        )}
+        strokeWidth={1.75}
+      />
+      <span className="relative truncate">{label}</span>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
   }
-};
+
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {content}
+    </button>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Case Item with inline rename + delete
@@ -89,6 +136,7 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
   const [renameLoading, setRenameLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Focus input when rename mode activates
   useEffect(() => {
     if (renaming) {
       setRenameValue(caseItem.title);
@@ -118,18 +166,17 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
 
   if (confirmingDelete) {
     return (
-      <div className="flex items-center justify-between gap-1.5 px-3 py-2.5 my-1 bg-destructive/10 border border-destructive/25 rounded-2xl animate-in fade-in-0 duration-150">
+      <div className="flex items-center justify-between gap-1.5 px-3 py-2.5 my-0.5 bg-destructive/10 border border-destructive/25 rounded-[14px] animate-in fade-in-0 duration-150">
         <span className="text-[12px] font-semibold text-destructive truncate">Delete chat?</span>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              void triggerHaptic();
               setConfirmingDelete(false);
               onDelete();
             }}
-            className="px-2.5 py-1 rounded-lg bg-destructive text-destructive-foreground text-[11px] font-semibold hover:bg-destructive/90 transition shadow-xs cursor-pointer"
+            className="px-2.5 py-1 rounded-[7px] bg-destructive text-white text-[11px] font-semibold hover:bg-destructive/90 transition shadow-sm cursor-pointer"
           >
             Delete
           </button>
@@ -139,7 +186,7 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
               e.stopPropagation();
               setConfirmingDelete(false);
             }}
-            className="px-2.5 py-1 rounded-lg bg-muted text-foreground text-[11px] font-medium hover:bg-muted/80 transition cursor-pointer border border-border"
+            className="px-2.5 py-1 rounded-[7px] bg-white/90 dark:bg-slate-800 text-foreground text-[11px] font-medium hover:bg-white transition cursor-pointer border border-slate-200/80"
           >
             Cancel
           </button>
@@ -151,28 +198,25 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
   return (
     <div
       className={cn(
-        "group relative w-full rounded-2xl transition-all duration-150 my-0.5",
+        "group relative w-full rounded-[15px] transition-all duration-200",
         isActive
-          ? "bg-accent/15 text-accent ring-1 ring-accent/30 font-medium"
-          : "hover:bg-muted/50 text-foreground/80 hover:text-foreground"
+          ? "bg-white/85 ring-1 ring-hippo-navy/[0.08] shadow-[0_12px_30px_rgba(26,39,68,0.065)]"
+          : "hover:-translate-y-px hover:bg-white/60 hover:shadow-[0_10px_26px_rgba(26,39,68,0.04)]"
       )}
     >
       {/* Main clickable row */}
       <button
         type="button"
         onClick={() => {
-          if (!renaming) {
-            void triggerHaptic();
-            onSelect();
-          }
+          if (!renaming) onSelect();
         }}
-        className="w-full min-w-0 overflow-hidden text-left px-3 py-2.5 cursor-pointer"
+        className="w-full min-w-0 overflow-hidden text-left px-3.5 py-3 cursor-pointer"
       >
-        <div className="flex items-start gap-2.5 pr-8 min-w-0">
+        <div className="flex items-start gap-2.5 pr-10 min-w-0">
           <MessageSquare
             className={cn(
-              "h-4 w-4 mt-0.5 shrink-0 transition-transform duration-150",
-              isActive ? "text-accent" : "text-muted-foreground/70 group-hover:text-foreground"
+              "h-[15px] w-[15px] mt-0.5 shrink-0 transition-all duration-200 group-hover:scale-[1.04]",
+              isActive ? "text-accent" : "text-muted-foreground/60 group-hover:text-muted-foreground"
             )}
             strokeWidth={1.75}
           />
@@ -185,7 +229,7 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={handleRenameKeyDown}
                   onBlur={() => void commitRename()}
-                  className="w-full min-w-0 bg-background text-[13px] font-medium text-foreground rounded-lg px-2 py-0.5 outline-none ring-2 ring-accent/50 focus:ring-accent border border-border shadow-xs"
+                  className="w-full min-w-0 bg-white/90 dark:bg-slate-800 text-[13px] font-medium text-foreground rounded-lg px-2 py-0.5 outline-none ring-2 ring-accent/50 focus:ring-accent transition shadow-sm"
                   disabled={renameLoading}
                 />
                 {renameLoading ? (
@@ -210,18 +254,13 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
                 </button>
               </div>
             ) : (
-              <p
-                className={cn(
-                  "text-[13px] truncate leading-snug tracking-[-0.005em]",
-                  isActive ? "text-accent font-semibold" : "text-foreground/90 font-medium"
-                )}
-              >
+              <p className="text-[13px] font-medium truncate text-foreground/90 leading-snug tracking-[-0.006em]">
                 {formatCaseTitle(caseItem.title)}
               </p>
             )}
 
             {!renaming && (
-              <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
+              <p className="text-[10px] text-muted-foreground/50 mt-1.5 tabular-nums">
                 {formatCaseDate(caseItem.updatedAt)}
               </p>
             )}
@@ -229,11 +268,11 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
         </div>
       </button>
 
-      {/* Actions Menu (⋯) */}
+      {/* Actions Menu (⋯) — smoothly visible on hover and always on active item */}
       {!renaming && (
         <div
           className={cn(
-            "absolute right-2 top-1/2 -translate-y-1/2 flex items-center transition-all duration-150 z-30",
+            "absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-all duration-150 z-30",
             isActive
               ? "opacity-100 visible pointer-events-auto"
               : "opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto focus-within:opacity-100 focus-within:visible focus-within:pointer-events-auto"
@@ -244,25 +283,25 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex h-7 w-7 items-center justify-center rounded-xl bg-background/80 hover:bg-background text-muted-foreground hover:text-foreground transition-all border border-border shadow-2xs"
+                className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white/65 hover:bg-white/90 text-muted-foreground hover:text-foreground transition-all shadow-sm border border-slate-200/50 backdrop-blur-md dark:bg-white/65 dark:hover:bg-white/90 dark:border-slate-200/50"
                 title="Conversation actions"
                 aria-label="Conversation actions"
               >
-                <MoreHorizontal className="h-3.5 w-3.5" strokeWidth={2} />
+                <MoreHorizontal className="h-4 w-4" strokeWidth={2} />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-38 rounded-2xl bg-card border border-border p-1.5 shadow-xl text-card-foreground"
+              className="w-40 rounded-[1.25rem] bg-white/65 dark:bg-white/65 backdrop-blur-xl border border-white/50 p-2 shadow-[0_28px_80px_rgba(26,39,68,0.14)]"
             >
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
                   setRenaming(true);
                 }}
-                className="gap-2 cursor-pointer rounded-xl px-2.5 py-1.5 text-xs font-medium focus:bg-muted focus:text-foreground"
+                className="gap-2.5 cursor-pointer rounded-xl px-3 py-2 text-[12px] font-medium transition-all focus:bg-white/80 dark:focus:bg-white/80 focus:shadow-[0_4px_12px_rgba(26,39,68,0.03)]"
               >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                <Pencil className="h-4 w-4 text-muted-foreground/80" />
                 <span>Rename</span>
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -270,9 +309,9 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
                   e.stopPropagation();
                   setConfirmingDelete(true);
                 }}
-                className="gap-2 cursor-pointer rounded-xl px-2.5 py-1.5 text-xs font-medium text-destructive focus:text-destructive focus:bg-destructive/10"
+                className="gap-2.5 cursor-pointer rounded-xl px-3 py-2 text-[12px] font-medium transition-all text-destructive focus:text-destructive focus:bg-destructive/10 dark:focus:bg-destructive/10"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-4 w-4" />
                 <span>Delete</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -284,7 +323,7 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar Component
+// Sidebar
 // ---------------------------------------------------------------------------
 
 interface SidebarProps {
@@ -309,47 +348,11 @@ export function Sidebar({
   activeCaseId,
 }: SidebarProps) {
   const { sidebarOpen, setSidebarOpen, persona } = useApp();
-  const { user, isPatientAccount, isDoctorVerified } = useAuth();
   const isPatient = persona === "patient";
-
-  const identifier = formatUserIdentifier(user);
-  const fullName =
-    (user?.user_metadata?.full_name as string | undefined) ||
-    identifier ||
-    (isPatient ? "Patient" : "Doctor");
-
-  const avatarUrl =
-    (user?.user_metadata?.avatar_url as string | undefined) ||
-    (user?.user_metadata?.picture as string | undefined);
-
-  const initials = fullName
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase() || "H";
-
-  const isCurrentDoctor = persona === "doctor" || user?.user_metadata?.role === "doctor";
-
-  const handleNewChat = () => {
-    void triggerHaptic();
-    onNewCase();
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
-  };
-
-  const handleProfileClick = () => {
-    void triggerHaptic();
-    onOpenSettings();
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
-  };
 
   return (
     <>
-      {/* Mobile backdrop for phones (< 768px) */}
+      {/* Mobile backdrop for screens < 768px */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -357,112 +360,80 @@ export function Sidebar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-xs md:hidden"
+            className="fixed inset-x-0 bottom-0 top-[68px] z-40 bg-hippo-navy/10 backdrop-blur-[2px] md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
       </AnimatePresence>
 
-      {/* Main Drawer */}
       <motion.aside
         initial={false}
         animate={{
-          x: sidebarOpen ? 0 : -320,
-          opacity: sidebarOpen ? 1 : 0.8,
+          width: sidebarOpen ? 280 : 0,
+          opacity: sidebarOpen ? 1 : 0,
         }}
-        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
         className={cn(
-          // Mobile: Full-height native Android drawer docked from left top to bottom above header
-          "fixed inset-y-0 left-0 z-[90] flex h-full w-[84vw] max-w-[320px] flex-col overflow-hidden bg-card text-foreground border-r border-border shadow-2xl pt-safe pb-safe",
-          // Desktop: relative flex column
-          "md:relative md:z-30 md:h-full md:shrink-0 md:transform-none",
-          sidebarOpen ? "w-[280px] min-w-[280px]" : "md:w-0 md:min-w-0 md:pointer-events-none md:border-r-0 hidden md:flex"
+          "fixed left-0 top-[68px] z-50 flex h-[calc(100%-68px)] flex-col overflow-hidden glass-sidebar bg-white/65 backdrop-blur-xl",
+          "md:top-auto md:h-full md:relative md:z-30 md:shrink-0",
+          "border-r border-slate-200/80 dark:border-slate-800",
+          sidebarOpen ? "w-[280px] min-w-[280px]" : "w-0 min-w-0 pointer-events-none border-r-0"
         )}
       >
-        <div className="flex h-full w-full flex-col">
-          {/* Native Drawer Header */}
-          <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border/60">
-            <div className="flex items-center gap-2.5">
-              <div className="relative p-1 rounded-xl bg-muted border border-border shadow-2xs">
-                <Image
-                  src="/logo.jpg"
-                  alt="Hippocrates"
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 rounded-lg object-contain"
-                  priority
-                />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold tracking-tight text-foreground leading-tight">
-                  HIPPOCRATES
-                </h2>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  {isPatient ? "Patient Health AI" : "Physician Copilot"}
-                </p>
-              </div>
-            </div>
-
-            {/* Mobile close button */}
+        <div className="flex h-full w-[280px] min-w-[280px] flex-col">
+          {/* Mobile close button */}
+          <div className="flex justify-end px-4 pb-1 pt-3 md:hidden">
             <Button
               variant="ghost"
               size="icon-sm"
-              className="md:hidden shrink-0 text-muted-foreground hover:text-foreground rounded-xl"
-              onClick={() => {
-                void triggerHaptic();
-                setSidebarOpen(false);
-              }}
-              aria-label="Close sidebar"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setSidebarOpen(false)}
             >
-              <X className="h-4 w-4" strokeWidth={2} />
+              <X className="h-4 w-4" strokeWidth={1.75} />
             </Button>
           </div>
 
-          {/* New Chat Primary Action Button */}
-          <div className="p-3 space-y-2">
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-accent text-accent-foreground font-semibold text-xs shadow-sm hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <Plus className="h-4 w-4" strokeWidth={2.5} />
-                <span>{isPatient ? "New Consultation" : "New Clinical Case"}</span>
-              </span>
-              <SquarePen className="h-4 w-4 opacity-75" />
-            </button>
-          </div>
+          {/* Primary nav */}
+          <nav className="space-y-1 px-4 pt-3 md:pt-4">
+            <SidebarNavItem
+              icon={Plus}
+              label={isPatient ? "New Health Chat" : "New Case"}
+              onClick={() => {
+                onNewCase();
+                if (typeof window !== "undefined" && window.innerWidth < 768) {
+                  setSidebarOpen(false);
+                }
+              }}
+            />
+            <SidebarNavItem
+              icon={Search}
+              label={isPatient ? "Search Chats" : "Search Cases"}
+              onClick={() => {}}
+            />
+          </nav>
 
-          {/* Previous Consultations / Cases */}
-          <div className="flex-1 overflow-hidden px-3">
-            <div className="flex items-center justify-between px-2 mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                {isPatient ? "Recent Consultations" : "Case Records"}
-              </span>
-              {cases.length > 0 && (
-                <span className="text-[10px] text-muted-foreground/60 tabular-nums font-mono">
-                  {cases.length}
-                </span>
-              )}
-            </div>
-
-            <ScrollArea className="h-[calc(100%-1.75rem)]">
-              <div className="space-y-0.5 pr-1 pb-4">
+          {/* Previous Cases / Conversations */}
+          <div className="mt-6 flex-1 overflow-hidden px-4">
+            <p className="px-3.5 mb-3 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.14em]">
+              {isPatient ? "Saved Conversations" : "Previous Cases"}
+            </p>
+            <ScrollArea className="h-[calc(100%-1.75rem)] mt-2.5">
+              <div className="space-y-1 pr-1">
                 {casesLoading && (
                   <div className="px-1 py-1 space-y-2">
-                    <div className="flex items-center gap-2 px-2 text-[11px] text-muted-foreground font-medium">
+                    <div className="flex items-center gap-2 px-2 text-[11px] text-muted-foreground/70 font-medium">
                       <Loader2 className="h-3 w-3 animate-spin text-accent" strokeWidth={2} />
-                      <span>Syncing clinical records…</span>
+                      <span>{isPatient ? "Syncing health history…" : "Loading case records…"}</span>
                     </div>
-                    <CasesListSkeleton count={4} />
+                    <CasesListSkeleton count={5} />
                   </div>
                 )}
 
                 {!casesLoading && cases.length === 0 && (
-                  <div className="rounded-2xl px-4 py-6 text-center text-[12px] leading-relaxed text-muted-foreground bg-muted/30 border border-border/50 my-2">
+                  <div className="rounded-[15px] px-3.5 py-3 text-[12px] leading-relaxed text-muted-foreground/65">
                     {isPatient
-                      ? "No previous consultations yet. Ask Aegis a health question or tap a suggestion above to start."
-                      : "No saved cases yet. Start a new case to review clinical differential."}
+                      ? "No saved conversations yet. Ask Aegis a health question or upload a medical report to start."
+                      : "No saved cases yet. Start a new case to save the conversation."}
                   </div>
                 )}
 
@@ -474,7 +445,8 @@ export function Sidebar({
                       isActive={activeCaseId === caseItem.id}
                       onSelect={() => {
                         onSelectCase(caseItem.id);
-                        if (typeof window !== "undefined" && window.innerWidth < 768) {
+                        // Close sidebar on mobile phones (< 768px) after selecting
+                        if (window.innerWidth < 768) {
                           setSidebarOpen(false);
                         }
                       }}
@@ -486,125 +458,67 @@ export function Sidebar({
             </ScrollArea>
           </div>
 
-          {/* Drawer Footer: User Profile Card (Clicking opens Settings & Theme Controls) */}
-          <div className="mt-auto p-3 border-t border-border/60 bg-card">
-            <button
-              type="button"
-              onClick={handleProfileClick}
-              className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-muted/50 hover:bg-muted text-foreground transition-all duration-150 border border-border/80 group cursor-pointer shadow-2xs text-left"
-              aria-label="User Profile and Settings"
-            >
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                {/* User Avatar */}
-                <div className="relative shrink-0">
-                  {avatarUrl ? (
-                    <Image
-                      src={avatarUrl}
-                      alt={fullName}
-                      width={36}
-                      height={36}
-                      className="h-9 w-9 rounded-full object-cover border border-border shadow-xs"
-                      referrerPolicy="no-referrer"
-                      unoptimized
-                    />
-                  ) : (
-                    <div
-                      className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shadow-xs ${
-                        isCurrentDoctor
-                          ? "bg-slate-900 dark:bg-slate-800 text-white"
-                          : "bg-blue-600 text-white"
-                      }`}
-                    >
-                      {initials || <User className="h-4 w-4" />}
-                    </div>
-                  )}
-                  <span
-                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background ${
-                      isPatientAccount
-                        ? "bg-blue-500"
-                        : isDoctorVerified
-                        ? "bg-emerald-500"
-                        : "bg-amber-500"
-                    }`}
-                  />
-                </div>
-
-                {/* Name & Role */}
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-foreground truncate leading-tight group-hover:text-accent transition-colors">
-                    {fullName}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5 font-sans">
-                    {isPatientAccount ? "Patient • Aegis" : isCurrentDoctor ? "Doctor • Oracle" : "Account & Themes"}
-                  </p>
-                </div>
-              </div>
-
-              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground shrink-0 transition-transform group-hover:translate-x-0.5" />
-            </button>
+          {/* Footer nav */}
+          <div className="mt-auto px-4 pb-6 pt-4 space-y-1 border-t border-hippo-navy/[0.055]">
+            <SidebarNavItem
+              icon={Settings}
+              label="Settings"
+              onClick={onOpenSettings}
+            />
           </div>
         </div>
       </motion.aside>
 
-      {/* Mini Rail on Desktop when sidebar is collapsed */}
+      {/* Mini taskbar when sidebar is closed on desktop/tablet */}
       {!sidebarOpen && (
         <motion.div
           initial={{ opacity: 0, x: -8 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2 }}
-          className="hidden md:flex relative shrink-0 z-30 h-full w-[64px] flex-col items-center py-4 border-r border-border bg-card text-foreground"
+          transition={{ duration: 0.25 }}
+          className="hidden md:flex relative shrink-0 z-30 h-full w-[68px] flex-col items-center py-5 border-r border-slate-200/80 dark:border-slate-800 glass-sidebar bg-white/65 backdrop-blur-xl"
         >
-          <div className="flex flex-col gap-2.5">
+          {/* Top Icons */}
+          <div className="flex flex-col gap-3">
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleNewChat}
-              title="New Consultation"
-              className="rounded-2xl h-10 w-10 text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+              onClick={onNewCase}
+              title="New Case"
+              className="rounded-[14px] h-11 w-11 text-muted-foreground hover:text-foreground hover:bg-white/60 transition-all duration-200 hover:shadow-[0_4px_12px_rgba(26,39,68,0.04)]"
             >
-              <SquarePen className="h-4 w-4" strokeWidth={1.8} />
+              <SquarePen className="h-5 w-5" strokeWidth={1.75} />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Search"
+              className="rounded-[14px] h-11 w-11 text-muted-foreground hover:text-foreground hover:bg-white/60 transition-all duration-200 hover:shadow-[0_4px_12px_rgba(26,39,68,0.04)]"
+            >
+              <Search className="h-5 w-5" strokeWidth={1.75} />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Pinned"
+              className="rounded-[14px] h-11 w-11 text-muted-foreground hover:text-foreground hover:bg-white/60 transition-all duration-200 hover:shadow-[0_4px_12px_rgba(26,39,68,0.04)]"
+            >
+              <Pin className="h-5 w-5" strokeWidth={1.75} />
             </Button>
           </div>
 
-          {/* Mini Rail Profile Button at bottom */}
-          <div className="mt-auto flex flex-col gap-2 pb-2">
-            <button
-              type="button"
-              onClick={handleProfileClick}
-              title={`Profile & Settings (${fullName})`}
-              className="relative rounded-full h-10 w-10 flex items-center justify-center p-0.5 border border-border hover:ring-2 hover:ring-accent/40 transition-all cursor-pointer shadow-xs"
+          {/* Bottom Settings Icon */}
+          <div className="mt-auto flex flex-col gap-3 pb-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenSettings}
+              title="Settings"
+              className="rounded-[14px] h-11 w-11 text-muted-foreground hover:text-foreground hover:bg-white/60 transition-all duration-200 hover:shadow-[0_4px_12px_rgba(26,39,68,0.04)]"
             >
-              {avatarUrl ? (
-                <Image
-                  src={avatarUrl}
-                  alt={fullName}
-                  width={34}
-                  height={34}
-                  className="h-8.5 w-8.5 rounded-full object-cover"
-                  referrerPolicy="no-referrer"
-                  unoptimized
-                />
-              ) : (
-                <div
-                  className={`h-8.5 w-8.5 rounded-full flex items-center justify-center text-xs font-bold ${
-                    isCurrentDoctor
-                      ? "bg-slate-900 dark:bg-slate-800 text-white"
-                      : "bg-blue-600 text-white"
-                  }`}
-                >
-                  {initials}
-                </div>
-              )}
-              <span
-                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background ${
-                  isPatientAccount
-                    ? "bg-blue-500"
-                    : isDoctorVerified
-                    ? "bg-emerald-500"
-                    : "bg-amber-500"
-                }`}
-              />
-            </button>
+              <Settings className="h-5 w-5" strokeWidth={1.75} />
+            </Button>
           </div>
         </motion.div>
       )}

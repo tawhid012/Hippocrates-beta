@@ -1,0 +1,35 @@
+# Hippocrates AI — Comprehensive Technical & Clinical Documentation
+
+Hippocrates AI is a healthcare intelligence system designed to empower patients with transparent health literacy and support clinicians with evidence-grounded differential reasoning.
+
+## Canonical Domain & Identity
+- Production Canonical: https://www.hippocrates.in
+- Organization: Hippocrates AI Health Technologies
+- Founders: Tawhidur Rahman Laskar, Ahmed Al-Ferdous
+- Academic Guide: Abdul Basith Barbhuiya
+
+## Architecture: Dual-Engine Separation
+Hippocrates avoids the common hazard of monolithic conversational AI by maintaining two separate engines with strict role boundaries:
+
+### Engine 1: Aegis (Patient Health Assistant)
+- Purpose: Help patients understand their symptoms and lab reports in plain, empathetic language.
+- Key Capabilities:
+  - Symptom clarification using clinical dimensions (onset, quality, timing, exacerbating/relieving factors).
+  - Medical report interpretation for standard panels (Complete Blood Count, Liver Function Tests, Renal Panels, Thyroid Function Tests).
+  - Consultation preparation: Generates organized question checklists and symptom timelines to share with human doctors.
+  - Aegis Pro Voice: Real-time low-latency voice interaction powered by conversational AI.
+- Boundary: Aegis explicitly states: "I provide general health education and consultation preparation. I do not provide medical diagnoses or prescribe treatments."
+
+### Engine 2: Oracle (Doctor Clinical Copilot)
+- Purpose: Decision support for qualified medical doctors during outpatient consultations and diagnostic workups.
+- Key Capabilities:
+  - Multi-model differential diagnostic reasoning (evaluates atypical presentations, can't-miss emergencies).
+  - Risk stratification score guidance (CRB-65, CURB-65, Wells score, CHA2DS2-VASc).
+  - Clinical documentation structuring: Generates SOAP (Subjective, Objective, Assessment, Plan) format case summaries and physician notes.
+  - Multi-model switching: Allows verified clinicians to compare outputs across advanced clinical reasoning engines (e.g. Gemini Pro Clinical).
+- Boundary: Oracle requires physician verification with a registered Medical Council Number and functions strictly as a decision-support aid.
+
+## Clinical Safety Protocol
+1. Emergency Gate: Immediate recognition of red-flag presentations (e.g. acute coronary syndromes, stroke symptoms, respiratory distress, acute anaphylaxis) halts conversational analysis and prioritizes immediate emergency dispatch guidance.
+2. Clinical State Isolation: Cross-patient state leakage is prohibited. Every consultation runs in an isolated context window with isolated case storage.
+3. Data Security: Strict Supabase row-level security policies. Healthcare interactions are never shared or sold to advertising brokers.

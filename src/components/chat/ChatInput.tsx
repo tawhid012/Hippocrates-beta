@@ -21,7 +21,6 @@ import { useApp } from "@/hooks/useAppContext";
 import { useVoiceCopilot } from "@/hooks/useVoiceCopilot";
 import { optimizeMedicalImageForUpload } from "@/lib/image-optimizer";
 import type { AttachmentCategory } from "@/lib/types";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import {
   Tooltip,
   TooltipContent,
@@ -83,7 +82,6 @@ export function ChatInput({
     stopListening,
     cancelListening,
     clearError: clearVoiceError,
-    isFilterActive,
   } = useVoiceCopilot();
 
   const defaultPlaceholder = isPatient
@@ -350,9 +348,10 @@ export function ChatInput({
 
       <div
         className={cn(
-          "rounded-[26px] border border-border bg-card shadow-xs flex flex-col transition-all duration-200 relative",
-          focused && "border-blue-500/50 ring-2 ring-blue-500/15 shadow-md",
-          isListening && "border-blue-500/60 bg-blue-50/20 dark:bg-blue-950/20 ring-2 ring-blue-500/25"
+          "rounded-2xl sm:rounded-[1.4rem] border border-slate-200/90 bg-white shadow-[0_2px_14px_rgba(0,0,0,0.04)] flex flex-col transition-all duration-200 relative",
+          centered && !focused && "shadow-[0_8px_30px_rgba(0,0,0,0.06)]",
+          focused && "border-slate-300 shadow-[0_4px_20px_rgba(0,0,0,0.06)]",
+          isListening && "border-blue-500/50 bg-blue-50/30 ring-2 ring-blue-500/20 shadow-[0_10px_30px_rgba(59,130,246,0.1)]"
         )}
       >
         {/* Compact ChatGPT-style Attachment Previews inside composer */}
@@ -456,15 +455,9 @@ export function ChatInput({
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200">
                       {formatDuration(duration)}
                     </span>
-                    {isFilterActive && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-800/40" title="Web Audio API 100Hz high-pass filter attenuating background HVAC, fan, and ambient rumbling">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        HVAC Filter Active
-                      </span>
-                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Ambient Consultation Mode • 100Hz HVAC-filtered dialogue
+                    Ambient Consultation Mode • Doctor & Patient dialogue
                   </p>
                 </div>
               </div>
@@ -536,9 +529,6 @@ export function ChatInput({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => {
-                      try {
-                        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-                      } catch {}
                       if (isPatient) {
                         setShowAttachmentMenu((prev) => !prev);
                       } else {
@@ -546,13 +536,13 @@ export function ChatInput({
                       }
                     }}
                     className={cn(
-                      "shrink-0 h-9 w-9 sm:h-10 sm:w-10 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors active:scale-95",
-                      selectedFiles.length > 0 && "text-blue-500 bg-blue-500/10",
-                      showAttachmentMenu && "bg-muted text-foreground ring-2 ring-blue-500/20"
+                      "shrink-0 h-9 w-9 sm:h-10 sm:w-10 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors",
+                      selectedFiles.length > 0 && "text-blue-600 bg-blue-50 hover:bg-blue-100",
+                      showAttachmentMenu && "bg-slate-100 text-slate-900 ring-2 ring-blue-500/20"
                     )}
                     disabled={disabled || fileLoading}
                   >
-                    <Paperclip className="h-[18px] w-[18px]" strokeWidth={2} />
+                    <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -568,49 +558,43 @@ export function ChatInput({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.96 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute bottom-12 left-0 z-50 w-56 rounded-2xl bg-card border border-border shadow-2xl p-1.5 flex flex-col gap-1"
+                    className="absolute bottom-12 left-0 z-50 w-56 rounded-2xl bg-white border border-slate-200 shadow-xl p-1.5 flex flex-col gap-1"
                   >
                     <button
                       type="button"
                       onClick={() => {
-                        try {
-                          Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-                        } catch {}
                         setShowAttachmentMenu(false);
                         labReportInputRef.current?.click();
                       }}
-                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-xs font-medium text-foreground hover:bg-muted transition-colors group cursor-pointer"
+                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors group"
                     >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 shrink-0">
                         <FileText className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="font-semibold text-foreground group-hover:text-emerald-600">
+                        <span className="font-semibold text-slate-900 group-hover:text-emerald-700">
                           Upload Lab Report
                         </span>
-                        <span className="text-[10px] text-muted-foreground">PDF, JPG, PNG blood tests</span>
+                        <span className="text-[10px] text-slate-500">PDF, JPG, PNG blood tests</span>
                       </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => {
-                        try {
-                          Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-                        } catch {}
                         setShowAttachmentMenu(false);
                         imageInputRef.current?.click();
                       }}
-                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-xs font-medium text-foreground hover:bg-muted transition-colors group cursor-pointer"
+                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors group"
                     >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/15 text-blue-600 dark:text-blue-400 shrink-0">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100 shrink-0">
                         <ImageIcon className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="font-semibold text-foreground group-hover:text-blue-600">
+                        <span className="font-semibold text-slate-900 group-hover:text-blue-700">
                           Upload Health Image
                         </span>
-                        <span className="text-[10px] text-muted-foreground">Photos of rashes, cuts, swelling</span>
+                        <span className="text-[10px] text-slate-500">Photos of rashes, cuts, swelling</span>
                       </div>
                     </button>
                   </motion.div>
@@ -630,10 +614,10 @@ export function ChatInput({
               disabled={disabled}
               rows={1}
               className={cn(
-                "flex-1 resize-none bg-transparent text-[15px] sm:text-[15.5px] leading-relaxed text-foreground tracking-tight font-sans",
-                "placeholder:text-muted-foreground/80 placeholder:font-normal",
+                "flex-1 resize-none bg-transparent text-base sm:text-[15.5px] leading-relaxed text-slate-900 tracking-[-0.005em]",
+                "placeholder:text-slate-400 placeholder:font-normal",
                 "focus:outline-none",
-                "max-h-[160px] py-2 px-1.5"
+                "max-h-[200px] py-2 px-1.5"
               )}
             />
 
@@ -644,19 +628,14 @@ export function ChatInput({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => {
-                    try {
-                      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-                    } catch {}
-                    startListening();
-                  }}
+                  onClick={startListening}
                   className={cn(
-                    "shrink-0 h-9 w-9 sm:h-10 sm:w-10 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors active:scale-95",
-                    !isPatient && "text-blue-500 hover:text-blue-600 hover:bg-blue-500/10"
+                    "shrink-0 h-9 w-9 sm:h-10 sm:w-10 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors",
+                    !isPatient && "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                   )}
                   disabled={disabled || fileLoading}
                 >
-                  <Mic className="h-[19px] w-[19px]" strokeWidth={2} />
+                  <Mic className="h-[19px] w-[19px]" strokeWidth={1.8} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -671,35 +650,30 @@ export function ChatInput({
               type="submit"
               size="icon"
               disabled={!canSubmit}
-              onClick={() => {
-                if (canSubmit) {
-                  try {
-                    Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
-                  } catch {}
-                }
-              }}
               className={cn(
-                "shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-full transition-all duration-200",
+                "shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-xl transition-all duration-200",
                 canSubmit
-                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm active:scale-95 cursor-pointer"
-                  : "bg-muted text-muted-foreground/40 cursor-not-allowed shadow-none"
+                  ? "bg-slate-900 hover:bg-slate-800 text-white shadow-sm hover:scale-[1.02] cursor-pointer"
+                  : "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-not-allowed shadow-none"
               )}
             >
               {centered ? (
-                <ArrowUp className="h-4 w-4" strokeWidth={2.4} />
+                <ArrowUp className="h-4 w-4" strokeWidth={2.2} />
               ) : (
-                <Send className="h-4 w-4" strokeWidth={2.2} />
+                <Send className="h-4 w-4" strokeWidth={2} />
               )}
             </Button>
           </div>
         )}
       </div>
 
-      <p className="text-center text-[10px] text-muted-foreground/60 mt-1.5 font-normal tracking-normal px-2 select-none">
-        {isPatient
-          ? "Aegis AI provides health guidance. Always consult a healthcare professional."
-          : "Oracle Copilot provides clinical decision support. Verify all clinical recommendations."}
-      </p>
+      {!centered && (
+        <p className="text-center text-[11px] text-slate-400 mt-2.5 font-normal tracking-normal px-2">
+          {isPatient
+            ? "Aegis helps explain health information and visible concerns. A photo cannot confirm a diagnosis. Always consult a healthcare professional."
+            : "Oracle Copilot provides clinical decision support. Always verify AI-generated notes before saving."}
+        </p>
+      )}
     </motion.form>
   );
 }

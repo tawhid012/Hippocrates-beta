@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
-import { formatUserIdentifier } from "@/lib/auth/phoneUtils";
 import { useApp } from "@/hooks/useAppContext";
 import {
   Stethoscope,
@@ -41,11 +40,9 @@ export function DoctorOnboardingModal() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const identifier = formatUserIdentifier(user);
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
-    identifier ||
-    "Doctor";
+    (user?.email ? user.email.split("@")[0] : "Doctor");
 
   // Strict role isolation: If existing user is a patient account, NEVER show registration form
   if (isPatientAccount) {
@@ -59,7 +56,7 @@ export function DoctorOnboardingModal() {
             <div>
               <h3 className="text-base font-bold text-slate-900 tracking-tight">Patient Account Cannot Register as Doctor</h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Under healthcare governance and clinical isolation rules, an account registered as a Patient (<span className="font-semibold text-slate-800">{identifier}</span>) cannot register as a medical doctor.
+                Under healthcare governance and clinical isolation rules, an account registered as a Patient (<span className="font-semibold text-slate-800">{user?.email}</span>) cannot register as a medical doctor.
               </p>
             </div>
             <div className="pt-2 flex flex-col gap-2">
