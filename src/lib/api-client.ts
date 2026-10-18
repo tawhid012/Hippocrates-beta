@@ -7,15 +7,10 @@
 
 import type { CaseSummary, CaseWithMessages, ChatRequest, ChatResponse } from "./types";
 import { createBrowserSupabaseClient } from "./supabase/client";
-import { Capacitor } from "@capacitor/core";
 
 export function getResolvedApiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
-  }
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (typeof window !== "undefined" && Capacitor.isNativePlatform() && siteUrl) {
-    return `${siteUrl.replace(/\/$/, "")}/api`;
   }
   return "/api";
 }

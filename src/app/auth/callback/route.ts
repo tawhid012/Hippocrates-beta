@@ -15,13 +15,12 @@ export async function GET(request: NextRequest) {
   // Production origin detection strategy:
   // 1. Explicitly configured public URL environment variable (Vercel, Netlify, Render, Railway, Custom)
   const envUrl =
+    process.env.NEXT_PUBLIC_CANONICAL_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.URL || // Netlify primary site URL
-    process.env.DEPLOY_PRIME_URL || // Netlify branch deploy URL
     (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "") ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
-    process.env.RENDER_EXTERNAL_URL || // Render
+    process.env.RENDER_EXTERNAL_URL ||
     (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
 
   let safeOrigin = envUrl ? envUrl.replace(/\/$/, "") : "";
@@ -130,12 +129,14 @@ export async function GET(request: NextRequest) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (supabaseUrl && supabaseAnonKey) {
+      let pendingCookies: Array<{ name: string; value: string; options?: any }> = [];
       const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
         cookies: {
           getAll() {
             return cookieStore.getAll();
           },
           setAll(cookiesToSet) {
+            pendingCookies = cookiesToSet;
             try {
               cookiesToSet.forEach(({ name, value, options }) =>
                 cookieStore.set(name, value, options)
@@ -161,7 +162,11 @@ export async function GET(request: NextRequest) {
         redirectUrl.searchParams.set("persona", persona);
       }
 
-      return NextResponse.redirect(redirectUrl);
+      const response = NextResponse.redirect(redirectUrl);
+      pendingCookies.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, options);
+      });
+      return response;
     }
   }
 

@@ -1,8 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { StatusBar, Style } from "@capacitor/status-bar";
-import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 type Theme = "dark" | "light" | "system";
 
@@ -37,18 +35,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (metaThemeColor) {
       metaThemeColor.setAttribute("content", colorHex);
     }
-
-    // Synchronize Capacitor native Android status bar
-    try {
-      if (typeof window !== "undefined" && "Capacitor" in window) {
-        StatusBar.setBackgroundColor({ color: colorHex }).catch(() => {});
-        StatusBar.setStyle({
-          style: targetTheme === "dark" ? Style.Dark : Style.Light,
-        }).catch(() => {});
-      }
-    } catch {
-      // Non-Capacitor environment
-    }
   }, []);
 
   useEffect(() => {
@@ -81,10 +67,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     (newTheme: Theme) => {
       setThemeState(newTheme);
       localStorage.setItem("hippocrates-theme", newTheme);
-
-      try {
-        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-      } catch {}
 
       if (newTheme === "system") {
         const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;

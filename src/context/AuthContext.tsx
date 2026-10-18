@@ -13,7 +13,6 @@ import type { User, Session } from "@supabase/supabase-js";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { UserPersona } from "@/lib/types";
 import { resolveApiUrl } from "@/lib/api-client";
-import { Capacitor } from "@capacitor/core";
 import {
   normalizePhoneNumber,
   isValidPhoneNumber,
@@ -326,17 +325,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem("hippocrates_persona", persona);
         }
 
-        let redirectTo: string;
-        if (typeof window !== "undefined" && Capacitor.isNativePlatform()) {
-          redirectTo = `ai.hippocrates.app://auth/callback?persona=${persona}&next=${encodeURIComponent("/")}`;
-        } else {
-          const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL;
-          const rawOrigin = (typeof window !== "undefined" && window.location.origin && !window.location.origin.includes("0.0.0.0"))
-            ? window.location.origin
-            : (configuredSiteUrl || "http://localhost:3000");
-          const origin = rawOrigin.replace(/\/$/, "").replace("0.0.0.0", "localhost");
-          redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
-        }
+        const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+        const origin = isLocal
+          ? window.location.origin
+          : (process.env.NEXT_PUBLIC_CANONICAL_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://www.hippocrates.in").replace(/\/$/, "");
+        const redirectTo = `${origin}/auth/callback?persona=${persona}&redirect_origin=${encodeURIComponent(origin)}&next=${encodeURIComponent("/")}`;
 
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
