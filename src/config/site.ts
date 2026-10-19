@@ -83,7 +83,7 @@ export const SITE_CONFIG: SiteConfig = {
  * Precedence:
  * 1. NEXT_PUBLIC_CANONICAL_URL (explicit production override)
  * 2. NEXT_PUBLIC_SITE_URL (configured deployment origin)
- * 3. Default fallback to https://hippocrates.in
+ * 3. Default fallback to https://www.hippocrates.in
  */
 export function getSiteUrl(): string {
   if (process.env.NEXT_PUBLIC_CANONICAL_URL) {

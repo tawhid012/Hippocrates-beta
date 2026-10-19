@@ -3,23 +3,23 @@ import assert from "node:assert/strict";
 
 describe("Hippocrates SEO & Canonical Architecture Suite", () => {
   test("Canonical site URL defaults safely and removes trailing slashes", () => {
-    const rawUrl = "https://hippocrates.in/";
+    const rawUrl = "https://www.hippocrates.in/";
     const cleanUrl = rawUrl.replace(/\/+$/, "");
-    assert.equal(cleanUrl, "https://hippocrates.in");
+    assert.equal(cleanUrl, "https://www.hippocrates.in");
   });
 
   test("Absolute URL builder constructs clean paths with canonical origin", () => {
-    const base = "https://hippocrates.in";
+    const base = "https://www.hippocrates.in";
     const buildAbs = (path) => {
       const cleanPath = path.startsWith("/") ? path : `/${path}`;
       return cleanPath === "/" ? base : `${base}${cleanPath}`;
     };
 
-    assert.equal(buildAbs("/"), "https://hippocrates.in");
-    assert.equal(buildAbs("/aegis"), "https://hippocrates.in/aegis");
-    assert.equal(buildAbs("oracle"), "https://hippocrates.in/oracle");
-    assert.equal(buildAbs("/medical-reports"), "https://hippocrates.in/medical-reports");
-    assert.equal(buildAbs("/knowledge/understanding-cbc-blood-test"), "https://hippocrates.in/knowledge/understanding-cbc-blood-test");
+    assert.equal(buildAbs("/"), "https://www.hippocrates.in");
+    assert.equal(buildAbs("/aegis"), "https://www.hippocrates.in/aegis");
+    assert.equal(buildAbs("oracle"), "https://www.hippocrates.in/oracle");
+    assert.equal(buildAbs("/medical-reports"), "https://www.hippocrates.in/medical-reports");
+    assert.equal(buildAbs("/knowledge/understanding-cbc-blood-test"), "https://www.hippocrates.in/knowledge/understanding-cbc-blood-test");
   });
 
   test("Preview deployment detection blocks indexing", () => {
@@ -51,7 +51,7 @@ describe("Structured Data (JSON-LD) Entity Integrity Suite", () => {
       "@type": "Organization",
       name: "Hippocrates",
       legalName: "Hippocrates AI Health Technologies",
-      url: "https://hippocrates.in",
+      url: "https://www.hippocrates.in",
       founders: [
         { name: "Tawhidur Rahman Laskar", role: "Architecture & System Lead" },
         { name: "Ahmed Al-Ferdous", role: "Research & Interface Co-Developer" },
@@ -61,7 +61,7 @@ describe("Structured Data (JSON-LD) Entity Integrity Suite", () => {
     assert.equal(org.name, "Hippocrates");
     assert.equal(org.founders.length, 2);
     assert.equal(org.founders[0].name, "Tawhidur Rahman Laskar");
-    assert.equal(org.url, "https://hippocrates.in");
+    assert.equal(org.url, "https://www.hippocrates.in");
   });
 
   test("Aegis SoftwareApplication schema reflects truthful health application categorization", () => {
@@ -91,9 +91,9 @@ describe("Structured Data (JSON-LD) Entity Integrity Suite", () => {
 
   test("Breadcrumbs schema enforces 1-indexed position sequence", () => {
     const items = [
-      { name: "Home", url: "https://hippocrates.in" },
-      { name: "Knowledge Hub", url: "https://hippocrates.in/knowledge" },
-      { name: "CBC Guide", url: "https://hippocrates.in/knowledge/understanding-cbc-blood-test" },
+      { name: "Home", url: "https://www.hippocrates.in" },
+      { name: "Knowledge Hub", url: "https://www.hippocrates.in/knowledge" },
+      { name: "CBC Guide", url: "https://www.hippocrates.in/knowledge/understanding-cbc-blood-test" },
     ];
 
     const breadcrumbs = {

@@ -83,7 +83,7 @@ export function AppDownloadClient({
     },
     {
       q: "Why does Android ask me to allow installation from unknown apps?",
-      a: "Android displays a standard precautionary prompt for any application downloaded outside the Google Play Store. This is an expected security feature of the Android operating system. Hippocrates is an independent direct release from our official website (hippocrates.in). You do not need to disable Google Play Protect; simply grant one-time permission for your browser to complete the package installation.",
+      a: "Android displays a standard precautionary prompt for any application downloaded outside the Google Play Store. This is an expected security feature of the Android operating system. Hippocrates is an independent direct release from our official website (www.hippocrates.in). You do not need to disable Google Play Protect; simply grant one-time permission for your browser to complete the package installation.",
     },
     {
       q: "What should I do if the APK does not install or says 'App not installed'?",
@@ -281,7 +281,7 @@ export function AppDownloadClient({
             <div className="p-5 rounded-2xl bg-slate-50/70 border border-slate-200/70 space-y-1">
               <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Distribution</span>
               <p className="text-sm sm:text-base font-bold text-slate-900">Official Direct</p>
-              <p className="text-[11px] text-slate-500">hippocrates.in</p>
+              <p className="text-[11px] text-slate-500">www.hippocrates.in</p>
             </div>
           </div>
 
@@ -413,7 +413,7 @@ export function AppDownloadClient({
               </div>
               <h3 className="font-bold text-base text-white">Official Website Release</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                This APK is distributed directly from <strong>https://hippocrates.in</strong>. It is built directly from the official Hippocrates project without third-party mirrors or modifications.
+                This APK is distributed directly from <strong>https://www.hippocrates.in</strong>. It is built directly from the official Hippocrates project without third-party mirrors or modifications.
               </p>
             </div>
 
@@ -513,7 +513,7 @@ export function AppDownloadClient({
               </div>
 
               <ol className="space-y-3 text-xs sm:text-sm text-slate-700 list-decimal list-inside leading-relaxed">
-                <li>Open <strong>https://hippocrates.in</strong> in Safari.</li>
+                <li>Open <strong>https://www.hippocrates.in</strong> in Safari.</li>
                 <li>Tap the <strong>Share</strong> button (box with upward arrow) in the bottom toolbar.</li>
                 <li>Scroll down and select <strong>Add to Home Screen</strong>.</li>
                 <li>Tap <strong>Add</strong> in the top-right corner.</li>
@@ -543,7 +543,7 @@ export function AppDownloadClient({
               </div>
 
               <ol className="space-y-3 text-xs sm:text-sm text-slate-700 list-decimal list-inside leading-relaxed">
-                <li>Open <strong>https://hippocrates.in</strong> in Google Chrome.</li>
+                <li>Open <strong>https://www.hippocrates.in</strong> in Google Chrome.</li>
                 <li>Tap the <strong>three vertical dots (⋮)</strong> in the upper right.</li>
                 <li>Tap <strong>Install app</strong> or <strong>Add to Home Screen</strong>.</li>
                 <li>Hippocrates launches in a clean, dedicated standalone window.</li>
