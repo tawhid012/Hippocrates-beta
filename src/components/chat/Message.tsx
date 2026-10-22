@@ -57,7 +57,9 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
   const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
   const isPatient = persona === "patient";
-  const isError = message.content === "Something went wrong while generating the response.";
+  const isError =
+    message.content === "Something went wrong while generating the response." ||
+    message.content.startsWith("Unable to connect to the AI engine");
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -153,7 +155,9 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
         {isError ? (
           <div className="rounded-xl px-4 py-3 bg-red-50 border border-red-200 shadow-xs space-y-2 max-w-md">
             <p className="text-xs sm:text-sm text-red-800 font-medium leading-relaxed">
-              Sorry, I couldn&apos;t complete that response.
+              {message.content.startsWith("Unable to connect")
+                ? message.content
+                : "Sorry, I couldn't complete that response."}
             </p>
             {onRetry && (
               <Button

@@ -388,7 +388,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             setChatStatus("completed");
             onCasesChanged?.();
           },
-          onError: () => {
+          onError: (err?: Error) => {
             if (streamRafId !== null && typeof window !== "undefined") {
               window.cancelAnimationFrame(streamRafId);
               streamRafId = null;
@@ -396,7 +396,17 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             flushStreamBuffer();
 
             hasError = true;
-            const humanMessage = "Something went wrong while generating the response.";
+            let humanMessage = "Something went wrong while generating the response.";
+            const errMsg = err?.message || "";
+            if (
+              errMsg.includes("API key not valid") ||
+              errMsg.includes("UNAUTHENTICATED") ||
+              errMsg.includes("API_KEY_INVALID") ||
+              errMsg.includes("MISSING_GEMINI_API_KEY") ||
+              errMsg.includes("unable to connect")
+            ) {
+              humanMessage = "Unable to connect to the AI engine: Invalid or expired Gemini API key. Please configure a valid key from Google AI Studio (aistudio.google.com) in .env.local or Admin Settings.";
+            }
             setError(humanMessage);
             setChatStatus("error");
 

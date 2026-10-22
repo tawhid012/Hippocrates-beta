@@ -49,7 +49,7 @@ const REPORT_FAQS = [
   {
     question: "How can Hippocrates Aegis help me with my test results?",
     answer:
-      "Aegis breaks down technical abbreviations, explains what each parameter represents biologically, and highlights pertinent topics to discuss during your doctor appointment. It does not provide medical diagnoses or replace clinical consultations.",
+      "Medical report intelligence is one capability within Aegis, the patient-facing AI assistant. Aegis explains laboratory abbreviations in plain language, breaks down biological markers, contextualizes reference intervals, and helps formulate informed questions to discuss with your doctor. It does not provide medical diagnoses or replace clinical consultations.",
   },
 ];
 
@@ -88,7 +88,7 @@ export default function MedicalReportsPage() {
               <span className="text-blue-600">medical test reports.</span>
             </h1>
             <p className="text-lg text-slate-600 leading-relaxed">
-              When laboratory printouts arrive filled with unfamiliar abbreviations, units, and out-of-range flags, it is easy to feel overwhelmed. This educational guide explains what common blood test panels measure, how reference intervals are established, and how to discuss results productively with your physician.
+              When laboratory printouts arrive filled with unfamiliar abbreviations, units, and out-of-range flags, it is easy to feel overwhelmed. As part of HIPPOCRATES Aegis—the comprehensive patient-facing AI assistant—medical report intelligence helps you explore test parameters, understand reference ranges, and prepare meaningful questions for your doctor.
             </p>
             <div className="flex flex-wrap gap-4 pt-2">
               <Link href="/?persona=patient">

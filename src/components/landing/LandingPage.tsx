@@ -238,25 +238,25 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
             {/* Left: Content */}
             <div className="lg:col-span-6 space-y-6">
               <span className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
-                FOR PATIENTS
+                HIPPOCRATES · AEGIS
               </span>
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
                 Understand your health.
                 <br />
-                With more clarity.
+                Navigate your next steps.
               </h2>
               <p className="text-slate-600 text-base leading-relaxed">
-                Aegis is designed to make health information easier to understand through natural conversations, medical report analysis, and physical health image analysis.
+                Aegis is a patient-facing AI assistant that helps you explore health concerns, understand medical reports, organise symptoms, recognise potential warning signs, and prepare for more informed conversations with healthcare professionals.
               </p>
 
               {/* Bullet highlights */}
               <ul className="space-y-3 pt-2">
                 {[
-                  "Ask health questions naturally",
-                  "Understand medical reports & blood work",
-                  "Analyse supported physical health images",
-                  "Get clear, easy-to-understand explanations",
-                  "Move toward professional care when needed",
+                  "Conversational health exploration & plain-language explanations",
+                  "Medical report intelligence across CBC, metabolic & thyroid panels",
+                  "Structured symptom timelines using the OPQRST framework",
+                  "Targeted consultation summaries & questions for your doctor",
+                  "Deterministic emergency warning-sign recognition & triage safety",
                 ].map((item, idx) => (
                   <li key={idx} className="flex items-center gap-3 text-sm text-slate-700">
                     <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
@@ -269,7 +269,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
               <div className="flex flex-col sm:flex-row gap-3.5 pt-4">
                 <Button
                   onClick={handleLaunchPatient}
-                  className="bg-[#0f172a] hover:bg-[#1e293b] text-white px-6 py-3 rounded-xl text-sm font-medium shadow-sm"
+                  className="bg-[#0f172a] hover:bg-[#1e293b] text-white px-6 py-3 rounded-xl text-sm font-medium shadow-sm cursor-pointer"
                 >
                   <span>Explore Aegis</span>
                   <ArrowRight className="h-4 w-4 ml-2" />
@@ -277,12 +277,11 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
 
                 <Button
                   variant="outline"
-                  onClick={handleLaunchAegisPro}
-                  className="border-slate-200 hover:bg-slate-50 text-slate-800 px-6 py-3 rounded-xl text-sm font-medium"
+                  onClick={handleOpenGetStarted}
+                  className="border-slate-200 hover:bg-slate-50 text-slate-800 px-6 py-3 rounded-xl text-sm font-medium cursor-pointer"
                 >
-                  <Mic className="h-4 w-4 mr-2 text-blue-600" />
-                  <span>Talk to Aegis Pro</span>
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                  <span>Discover HIPPOCRATES</span>
+                  <ArrowRight className="h-4 w-4 ml-2 text-slate-400" />
                 </Button>
               </div>
             </div>
@@ -297,7 +296,7 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-900">Aegis Patient Assistant</div>
-                      <div className="text-[11px] text-slate-500">Laboratory & Symptom Analysis</div>
+                      <div className="text-[11px] text-slate-500">Conversational Health &amp; Consultation Preparation</div>
                     </div>
                   </div>
                   <span className="text-[11px] font-medium text-blue-700 bg-blue-100/70 px-2.5 py-0.5 rounded-full">
@@ -309,20 +308,21 @@ export function LandingPage({ onSelectPersona, onLaunchAegisPro, onGetStarted }:
                 <div className="space-y-3 text-xs leading-relaxed">
                   <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 text-slate-800">
                     <span className="font-semibold text-slate-900 block mb-1">Patient Query:</span>
-                    &ldquo;Can you explain what my elevated HbA1c of 6.2% means on this blood test?&rdquo;
+                    &ldquo;I&apos;ve had dull right-side abdominal discomfort since yesterday morning. How should I prepare for my doctor visit?&rdquo;
                   </div>
 
                   <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-100 text-slate-800 space-y-2">
                     <div className="flex items-center gap-1.5 font-semibold text-blue-900 text-xs">
                       <Shield className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Aegis Clinical Explanation:</span>
+                      <span>Aegis Clinical Guidance:</span>
                     </div>
                     <p className="text-slate-700">
-                      An HbA1c of <strong>6.2%</strong> indicates an estimated 3-month average blood glucose level in the <em>prediabetes range (5.7% – 6.4%)</em>.
+                      Let&apos;s organize your timeline using the <strong>OPQRST framework</strong> so your doctor has complete context. Does the pain worsen when moving or pressing, and have you noticed any fever, nausea, or urinary changes?
                     </p>
-                    <p className="text-slate-600 text-[11px]">
-                      This is an early indicator where lifestyle adaptations, nutrition adjustments, and consultation with your primary physician can help maintain optimal glucose balance.
-                    </p>
+                    <div className="pt-1.5 flex items-center justify-between text-[11px] text-slate-500 border-t border-blue-100/80">
+                      <span className="font-medium text-blue-700">Timeline &amp; Questions Ready</span>
+                      <span>Not a medical diagnosis</span>
+                    </div>
                   </div>
                 </div>
               </div>

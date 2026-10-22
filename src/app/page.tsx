@@ -1,49 +1,57 @@
-"use client";
+import type { Metadata } from "next";
+import { HomeClient } from "@/components/landing/HomeClient";
+import { SITE_CONFIG } from "@/config/site";
 
-import dynamic from "next/dynamic";
-import { useAuth } from "@/context/AuthContext";
-import { LandingPage } from "@/components/landing/LandingPage";
-
-// Dynamically import the heavy clinical authenticated workspace so unauthenticated
-// landing page visitors and crawlers receive an ultra-lightweight initial bundle (<80kB JS)
-const AuthenticatedWorkspace = dynamic(
-  () =>
-    import("@/components/workspace/AuthenticatedWorkspace").then(
-      (mod) => mod.AuthenticatedWorkspace
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-          <p className="text-xs font-medium text-slate-500">Loading Hippocrates Workspace...</p>
-        </div>
-      </div>
-    ),
-  }
-);
-
-const AuthModal = dynamic(
-  () => import("@/components/auth/AuthModal").then((mod) => mod.AuthModal),
-  { ssr: false }
-);
+export const metadata: Metadata = {
+  title: "Hippocrates — AI for Better-Informed Healthcare | Official Website",
+  description:
+    "Official website of Hippocrates: an AI-powered healthcare ecosystem featuring Aegis, the patient-facing AI assistant for conversational health guidance, symptom organization, report intelligence, and doctor consultation preparation, and Oracle for physician clinical decision support.",
+  keywords: [
+    "Hippocrates",
+    "Hippocrates AI",
+    "Hippocrates official website",
+    "Hippocrates healthcare AI",
+    "Hippocrates Aegis",
+    "Hippocrates Oracle",
+    "patient-facing healthcare AI assistant",
+    "AI clinical copilot",
+    "AI health assistant",
+    "medical report explanation",
+    "symptom history and doctor visit preparation",
+    "understanding blood test reports",
+    "clinical decision support software",
+    "AI tools for doctors",
+    "responsible AI in healthcare",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Hippocrates — AI for Better-Informed Healthcare | Official Website",
+    description:
+      "Official website of Hippocrates: an AI-powered healthcare ecosystem featuring Aegis, the patient-facing AI assistant for conversational health guidance, symptom organization, report intelligence, and doctor consultation preparation, and Oracle for physician clinical decision support.",
+    url: "/",
+    siteName: SITE_CONFIG.name,
+    images: [
+      {
+        url: "/hippocrates-og.png",
+        width: 1024,
+        height: 536,
+        alt: "Hippocrates — AI for Better-Informed Healthcare. Aegis for Patients and Oracle for Clinicians.",
+        type: "image/png",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Hippocrates — AI for Better-Informed Healthcare | Official Website",
+    description:
+      "Official website of Hippocrates: an AI-powered healthcare ecosystem featuring Aegis, the patient-facing AI assistant for conversational health guidance, symptom organization, report intelligence, and doctor consultation preparation, and Oracle for physician clinical decision support.",
+    images: ["/hippocrates-og.png"],
+    creator: "@hippocrates_ai",
+  },
+};
 
 export default function HomePage() {
-  const { user, openAuthModal } = useAuth();
-
-  if (!user) {
-    return (
-      <>
-        <LandingPage
-          onSelectPersona={(p) => openAuthModal(p, "signup")}
-          onLaunchAegisPro={() => openAuthModal("patient", "signup")}
-          onGetStarted={() => openAuthModal("patient", "signup")}
-        />
-        <AuthModal />
-      </>
-    );
-  }
-
-  return <AuthenticatedWorkspace />;
+  return <HomeClient />;
 }

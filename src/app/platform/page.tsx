@@ -89,22 +89,30 @@ export default function PlatformPage() {
                   <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md">
                     <Activity className="h-7 w-7" />
                   </div>
-                  <h3 className="text-2xl font-bold text-slate-900">Aegis Patient Health Intelligence</h3>
+                  <h3 className="text-2xl font-bold text-slate-900">Aegis Patient Health Assistant</h3>
                   <p className="text-slate-600 text-sm leading-relaxed">
-                    Designed like a calm, attentive doctor during consultation. Aegis helps patients navigate symptoms, interpret lab reports, and analyze physical skin concerns through progressive conversational investigation without overwhelming medical jargon.
+                    The patient-facing AI assistant within HIPPOCRATES. Aegis helps users explore health concerns conversationally, organize symptom histories using the OPQRST framework, understand medical reports, recognize potential warning signs, and prepare for informed doctor consultations.
                   </p>
                   <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 pt-2">
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span>Conversational Clinical Investigation (OPQRST Timeline)</span>
+                      <span>Conversational Health Assistance &amp; Follow-up Clarification</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span>Laboratory Report Analyzer (CBC, Thyroid, Metabolic)</span>
+                      <span>Structured OPQRST Symptom Histories &amp; Clinical Timelines</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <span>Real-time voice interaction via Aegis Pro Voice</span>
+                      <span>Medical Report Intelligence (CBC, LFT, KFT, Thyroid Panels)</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>Doctor Consultation Preparation &amp; Question Checklists</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>Deterministic Emergency Warning-Sign Recognition &amp; Triage</span>
                     </li>
                   </ul>
                 </div>

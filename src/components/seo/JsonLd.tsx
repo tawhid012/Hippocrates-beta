@@ -27,6 +27,7 @@ export function getOrganizationJsonLd() {
     "@type": "Organization",
     "@id": `${siteUrl}#organization`,
     name: SITE_CONFIG.name,
+    alternateName: "Hippocrates AI",
     legalName: SITE_CONFIG.legalName,
     url: siteUrl,
     logo: {
@@ -35,11 +36,26 @@ export function getOrganizationJsonLd() {
       caption: "Hippocrates AI Logo",
     },
     description: SITE_CONFIG.description,
-    founder: SITE_CONFIG.founders.map((f) => ({
-      "@type": "Person",
-      name: f.name,
-      jobTitle: f.title,
-    })),
+    knowsAbout: [
+      "Artificial Intelligence in Healthcare",
+      "Clinical Decision Support",
+      "Medical Laboratory Report Interpretation",
+    ],
+    founder: [
+      {
+        "@type": "Person",
+        "@id": `${getAbsoluteUrl("/about")}#tawhidur-rahman-laskar`,
+        name: "Tawhidur Rahman Laskar",
+        jobTitle: "Founder & Architecture Lead",
+        sameAs: ["https://github.com/tawhid012"],
+      },
+      {
+        "@type": "Person",
+        "@id": `${getAbsoluteUrl("/about")}#ahmed-al-ferdous`,
+        name: "Ahmed Al-Ferdous",
+        jobTitle: "Co-Founder & Interface Lead",
+      },
+    ],
     contactPoint: [
       {
         "@type": "ContactPoint",
@@ -55,9 +71,8 @@ export function getOrganizationJsonLd() {
       },
     ],
     sameAs: [
+      // Only include verified canonical external identity sources
       SITE_CONFIG.socials.github,
-      SITE_CONFIG.socials.twitter,
-      SITE_CONFIG.socials.linkedin,
     ].filter(Boolean),
   };
 }
@@ -73,6 +88,7 @@ export function getWebSiteJsonLd() {
     "@id": `${siteUrl}#website`,
     url: siteUrl,
     name: SITE_CONFIG.name,
+    alternateName: "Hippocrates AI",
     description: SITE_CONFIG.description,
     publisher: {
       "@id": `${siteUrl}#organization`,
@@ -96,7 +112,7 @@ export function getAegisSoftwareJsonLd() {
     operatingSystem: "Web, iOS (PWA), Android (PWA)",
     url: siteUrl,
     description:
-      "Patient health assistant for conversational health guidance, medical report interpretation, and consultation preparation. Not an autonomous diagnostic device.",
+      "Patient-facing healthcare AI assistant for exploring health concerns, understanding medical reports, organizing symptoms with OPQRST, and preparing for doctor consultations. Not an autonomous diagnostic device.",
     offers: {
       "@type": "Offer",
       price: "0",

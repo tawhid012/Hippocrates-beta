@@ -75,8 +75,18 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Enforce noindex headers on admin, private settings, and API routes
-        source: "/(admin|settings|api)/:path*",
+        // Enforce noindex headers on exact admin and settings routes
+        source: "/:path(admin|settings)",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noarchive",
+          },
+        ],
+      },
+      {
+        // Enforce noindex headers on subpaths of admin, settings, and all API endpoints
+        source: "/:path(admin|settings|api)/:subpath*",
         headers: [
           {
             key: "X-Robots-Tag",

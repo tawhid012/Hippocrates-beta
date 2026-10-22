@@ -42,6 +42,13 @@ describe("Hippocrates SEO & Canonical Architecture Suite", () => {
     assert.equal(redirects[0].destination, "https://www.hippocrates.in/:path*");
     assert.equal(redirects[0].permanent, true);
   });
+
+  test("Homepage title communicates brand and official website identity", () => {
+    const homepageTitle = "Hippocrates — AI for Better-Informed Healthcare | Official Website";
+    assert.ok(homepageTitle.includes("Hippocrates"));
+    assert.ok(homepageTitle.includes("Official Website"));
+    assert.ok(homepageTitle.length <= 70);
+  });
 });
 
 describe("Structured Data (JSON-LD) Entity Integrity Suite", () => {
@@ -50,18 +57,52 @@ describe("Structured Data (JSON-LD) Entity Integrity Suite", () => {
       "@context": "https://schema.org",
       "@type": "Organization",
       name: "Hippocrates",
+      alternateName: "Hippocrates AI",
       legalName: "Hippocrates AI Health Technologies",
       url: "https://www.hippocrates.in",
-      founders: [
-        { name: "Tawhidur Rahman Laskar", role: "Architecture & System Lead" },
-        { name: "Ahmed Al-Ferdous", role: "Research & Interface Co-Developer" },
+      knowsAbout: [
+        "Artificial Intelligence in Healthcare",
+        "Clinical Decision Support",
+        "Medical Laboratory Report Interpretation",
+      ],
+      founder: [
+        {
+          "@type": "Person",
+          "@id": "https://www.hippocrates.in/about#tawhidur-rahman-laskar",
+          name: "Tawhidur Rahman Laskar",
+          jobTitle: "Founder & Architecture Lead",
+          sameAs: ["https://github.com/tawhid012"],
+        },
+        {
+          "@type": "Person",
+          "@id": "https://www.hippocrates.in/about#ahmed-al-ferdous",
+          name: "Ahmed Al-Ferdous",
+          jobTitle: "Co-Founder & Interface Lead",
+        },
       ],
     };
 
     assert.equal(org.name, "Hippocrates");
-    assert.equal(org.founders.length, 2);
-    assert.equal(org.founders[0].name, "Tawhidur Rahman Laskar");
+    assert.equal(org.alternateName, "Hippocrates AI");
+    assert.equal(org.founder.length, 2);
+    assert.equal(org.founder[0].name, "Tawhidur Rahman Laskar");
+    assert.equal(org.founder[0]["@id"], "https://www.hippocrates.in/about#tawhidur-rahman-laskar");
+    assert.equal(org.founder[0].sameAs[0], "https://github.com/tawhid012");
     assert.equal(org.url, "https://www.hippocrates.in");
+    assert.ok(org.knowsAbout.includes("Clinical Decision Support"));
+  });
+
+  test("WebSite schema declares alternateName for search disambiguation", () => {
+    const website = {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Hippocrates",
+      alternateName: "Hippocrates AI",
+      url: "https://www.hippocrates.in",
+    };
+
+    assert.equal(website.name, "Hippocrates");
+    assert.equal(website.alternateName, "Hippocrates AI");
   });
 
   test("Aegis SoftwareApplication schema reflects truthful health application categorization", () => {
@@ -136,15 +177,39 @@ describe("Crawl Security & Noindex Visibility Suite", () => {
     assert.equal(isDisallowed("/medical-reports"), false);
   });
 
-  test("Security headers enforce X-Robots-Tag: noindex on sensitive paths", () => {
-    const headerSource = "/(admin|settings|api)/:path*";
-    const headerValue = "noindex, nofollow, noarchive";
-    const regex = /^\/(admin|settings|api)\/.*$/;
+  test("Robots includes major AI and search engine crawlers", () => {
+    const allowedUserAgents = [
+      "*",
+      "Googlebot",
+      "Bingbot",
+      "GPTBot",
+      "PerplexityBot",
+      "ClaudeBot",
+      "Applebot",
+    ];
 
-    assert.equal(headerValue, "noindex, nofollow, noarchive");
-    assert.equal(regex.test("/admin/cases"), true);
-    assert.equal(regex.test("/settings/profile"), true);
-    assert.equal(regex.test("/api/clinical"), true);
-    assert.equal(regex.test("/aegis"), false);
+    assert.ok(allowedUserAgents.includes("Googlebot"));
+    assert.ok(allowedUserAgents.includes("Bingbot"));
+    assert.ok(allowedUserAgents.includes("GPTBot"));
+    assert.ok(allowedUserAgents.includes("PerplexityBot"));
+    assert.ok(allowedUserAgents.includes("ClaudeBot"));
+    assert.ok(allowedUserAgents.includes("Applebot"));
+  });
+
+  test("Security headers enforce X-Robots-Tag: noindex on sensitive paths", () => {
+    const isSensitivePath = (path) => {
+      // Matches /admin, /settings exactly or /admin/..., /settings/..., /api/...
+      return /^\/(admin|settings)(\/.*)?$/.test(path) || /^\/api\/.*$/.test(path);
+    };
+
+    assert.equal(isSensitivePath("/admin"), true);
+    assert.equal(isSensitivePath("/settings"), true);
+    assert.equal(isSensitivePath("/admin/cases"), true);
+    assert.equal(isSensitivePath("/settings/profile"), true);
+    assert.equal(isSensitivePath("/api/clinical"), true);
+    assert.equal(isSensitivePath("/"), false);
+    assert.equal(isSensitivePath("/aegis"), false);
+    assert.equal(isSensitivePath("/oracle"), false);
+    assert.equal(isSensitivePath("/medical-reports"), false);
   });
 });

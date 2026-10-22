@@ -92,7 +92,7 @@ export function GetStartedModal({
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Understand lab reports, decode symptoms, and prepare for doctor visits with plain-language AI.
+                  Explore health concerns, understand medical reports, organize symptoms, and prepare for doctor visits with plain-language AI.
                 </p>
               </div>
             </div>

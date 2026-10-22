@@ -95,7 +95,7 @@ export function AppDownloadClient({
     },
     {
       q: "Is Hippocrates a replacement for a doctor?",
-      a: "No. Hippocrates is strictly an educational healthcare intelligence and clinical-support platform. Aegis helps patients organize symptoms and understand lab reports to facilitate better doctor appointments. Oracle assists verified physicians with differential reasoning and documentation. Neither engine provides definitive medical diagnoses or replaces professional human clinical judgment.",
+      a: "No. Hippocrates is strictly an educational healthcare intelligence and clinical-support platform. Aegis is a patient-facing AI assistant that helps people explore health concerns, understand medical reports, organize symptoms, and prepare for informed doctor visits. Oracle assists verified physicians with differential reasoning and documentation. Neither engine provides definitive medical diagnoses or replaces professional human clinical judgment.",
     },
   ];
 

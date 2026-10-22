@@ -91,6 +91,7 @@ async function updateCaseStateAsync(
 }
 
 export async function POST(request: Request) {
+  const reqStart = performance.now();
   let body: {
     message?: unknown;
     caseId?: unknown;
@@ -360,10 +361,12 @@ export async function POST(request: Request) {
           let finalSafety: SafetyEvaluation | undefined;
           let finalReportAnalysis: ReportAnalysisResult | undefined;
           let finalVisualSummary: string | undefined;
+          let tFirstToken: number | null = null;
 
           // Ensure case state is loaded before streaming call
           await caseStateLoadPromise;
           currentCaseState = extractInstantaneousCaseUpdates(rawMessage, currentCaseState);
+          const tPreModel = performance.now() - reqStart;
 
           for await (const chunk of askAegisServiceStream(
             rawMessage,
@@ -374,6 +377,9 @@ export async function POST(request: Request) {
           )) {
 
             if (chunk.type === "delta" && chunk.text) {
+              if (tFirstToken === null) {
+                tFirstToken = performance.now() - reqStart;
+              }
               fullReply += chunk.text;
               controller.enqueue(
                 encoder.encode(`event: delta\ndata: ${JSON.stringify({ text: chunk.text })}\n\n`)
@@ -384,6 +390,13 @@ export async function POST(request: Request) {
               if (chunk.visualAnalysisSummary) finalVisualSummary = chunk.visualAnalysisSummary;
             }
           }
+
+          const tStreamEnd = performance.now() - reqStart;
+          const timingMetrics = {
+            preModelMs: Math.round(tPreModel),
+            ttftMs: Math.round(tFirstToken || 0),
+            totalMs: Math.round(tStreamEnd),
+          };
 
           const cleanStreamReply = stripInternalCaseState(fullReply);
 
@@ -432,6 +445,7 @@ export async function POST(request: Request) {
                 visualAnalysisSummary: finalVisualSummary,
                 assessmentStatus: statusGate,
                 urgencyLevel: currentCaseState.urgency_level || "ROUTINE",
+                metrics: timingMetrics,
                 messages: {
                   user: userMessage,
                   assistant: assistantMessage,

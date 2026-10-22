@@ -5,9 +5,9 @@ import { getGeminiCandidateModels } from "./config";
 // In-memory model circuit breaker with cooldown timestamps
 const modelCooldowns = new Map<string, number>();
 
-// If a model cannot produce a single token within 2200ms, Google is likely throttling or queueing it
-const FIRST_TOKEN_TIMEOUT_MS = 2200;
-const COOLDOWN_DURATION_MS = 180_000; // 3 minutes
+// TTFT guard: allow up to 10000ms for initial token before failover, preventing false failover during network latency
+const FIRST_TOKEN_TIMEOUT_MS = 10_000;
+const COOLDOWN_DURATION_MS = 30_000; // 30 seconds cooldown for transient spikes
 
 export function markModelCooldown(model: string, durationMs = COOLDOWN_DURATION_MS) {
   modelCooldowns.set(model, Date.now() + durationMs);
@@ -23,6 +23,28 @@ export function isModelInCooldown(model: string): boolean {
   return true;
 }
 
+export function clearAllModelCooldowns(): void {
+  modelCooldowns.clear();
+}
+
+export function isFatalProviderError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("api_key_invalid") ||
+    lower.includes("api key not valid") ||
+    lower.includes("access_token_type_unsupported") ||
+    lower.includes("unauthenticated") ||
+    lower.includes("permission_denied") ||
+    lower.includes("missing_gemini_api_key") ||
+    lower.includes("billing_disabled") ||
+    lower.includes("invalid_argument") ||
+    (lower.includes("400") && !lower.includes("quota")) ||
+    lower.includes("401") ||
+    (lower.includes("403") && !lower.includes("quota"))
+  );
+}
+
 export function getAvailableCandidateModels(candidateModels?: string[]): string[] {
   const all = candidateModels || getGeminiCandidateModels();
   const available: string[] = [];
@@ -36,8 +58,10 @@ export function getAvailableCandidateModels(candidateModels?: string[]): string[
     }
   }
 
-  // Active un-throttled models first, followed by cooling models as last resort
-  return [...available, ...cooledDown];
+  // Active un-throttled models first, with at most 1 cooled down model as emergency fallback
+  const candidates = available.length > 0 ? available : cooledDown.slice(0, 1);
+  // Cap candidate trials to at most 3 distinct models to prevent multi-second failover cascades
+  return candidates.slice(0, 3);
 }
 
 export interface StreamParams {
@@ -48,8 +72,9 @@ export interface StreamParams {
 /**
  * Ultra-low latency streaming generator:
  * 1. Skips known throttled/503 models via the cooldown circuit breaker.
- * 2. Implements a 2200ms TTFT guard to fail over instantly if Google queues a model.
- * 3. Delivers first token to the client in sub-second milliseconds.
+ * 2. Implements a 5000ms TTFT guard to fail over if a model is queued or unresponsive.
+ * 3. Immediately aborts without failover cascades on fatal credential/permission errors.
+ * 4. Delivers first token to the client in sub-second milliseconds.
  */
 export async function* streamGeminiWithFastFailover(
   ai: GoogleGenAI,
@@ -73,7 +98,7 @@ export async function* streamGeminiWithFastFailover(
 
       const iterator = responseStream[Symbol.asyncIterator]();
 
-      // Race first token against timeout to detect slow/overloaded models instantly
+      // Race first token against timeout to detect slow/overloaded models
       const firstChunkResult = await Promise.race([
         iterator.next(),
         new Promise<never>((_, reject) =>
@@ -108,6 +133,12 @@ export async function* streamGeminiWithFastFailover(
 
       // If tokens were already sent to client, rethrow to prevent corrupt stream
       if (yieldedAny) {
+        throw err;
+      }
+
+      // If fatal credential or authorization error, abort immediately without trying other models
+      if (isFatalProviderError(err)) {
+        console.error(`${logPrefix} Fatal provider authentication/permission error with model ${model}:`, errMsg);
         throw err;
       }
 

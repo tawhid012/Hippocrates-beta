@@ -14,17 +14,23 @@ export default function robots(): MetadataRoute.Robots {
     };
   }
 
+  // Major search and AI discovery crawlers
+  const allowedUserAgents = [
+    "*",
+    "Googlebot",
+    "Bingbot",
+    "GPTBot",
+    "PerplexityBot",
+    "ClaudeBot",
+    "Applebot",
+  ];
+
   return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: [
-          "/api/*",
-          "/auth/*",
-        ],
-      },
-    ],
+    rules: allowedUserAgents.map((agent) => ({
+      userAgent: agent,
+      allow: "/",
+      disallow: ["/api/*", "/auth/*"],
+    })),
     sitemap: `${siteUrl}/sitemap.xml`,
   };
 }

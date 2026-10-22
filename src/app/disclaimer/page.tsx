@@ -83,9 +83,11 @@ export default function DisclaimerPage() {
                 Aegis is calibrated to assist patients in:
               </p>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Translating technical diagnostic terminology into understandable concepts.</li>
-                <li>Structuring historical symptom timelines (onset, duration, triggers).</li>
+                <li>Exploring health concerns conversationally and clarifying medical information in accessible language.</li>
+                <li>Understanding laboratory test reports (CBC, LFT, KFT, thyroid panels) and reference intervals.</li>
+                <li>Structuring historical symptom timelines and characteristics using the OPQRST clinical framework.</li>
                 <li>Compiling targeted question lists to facilitate productive discussions during in-person clinician visits.</li>
+                <li>Identifying critical red-flag emergency symptoms deterministically and directing users toward immediate emergency care.</li>
               </ul>
               <p>
                 You must never delay, disregard, or avoid seeking qualified medical advice because of information presented by Aegis. Always review lab reports and symptoms directly with your treating physician.

@@ -12,7 +12,7 @@ export function PublicFooter() {
           <div className="md:col-span-4 space-y-4">
             <HippocratesLogo size="md" theme="dark" />
             <p className="text-slate-400 text-sm max-w-sm leading-relaxed">
-              Dual-engine clinical intelligence platform. Aegis for patient health literacy and consultation preparation; Oracle for physician differential reasoning and documentation support.
+              AI Clinical Platform featuring dual engines: Aegis, the patient-facing AI assistant for exploring health concerns, understanding reports, and consultation preparation; Oracle, the clinical copilot for verified physicians.
             </p>
             <div className="flex items-center gap-2 pt-2 text-xs text-slate-400">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />

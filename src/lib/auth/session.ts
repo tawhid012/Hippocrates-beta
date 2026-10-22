@@ -114,12 +114,20 @@ export async function getAuthenticatedUser(): Promise<User | null> {
       }
     }
 
-    // 2. Check SSR cookies
+    // 2. Check SSR cookies: short-circuit if no Supabase auth token cookie exists
     const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    const hasAuthCookie = allCookies.some(
+      (c) => c.name.startsWith("sb-") || c.name.includes("auth-token")
+    );
+    if (!hasAuthCookie) {
+      return null;
+    }
+
     const supabase = createServerClient(url, anonKey, {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return allCookies;
         },
         setAll(cookiesToSet) {
           try {

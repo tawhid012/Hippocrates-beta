@@ -332,22 +332,63 @@ export async function getCase(
   ownerToken?: string,
   userId?: string
 ): Promise<CaseWithMessages | null> {
+  // 1. Fast in-memory bounded cache check (<0.1ms) with strict authorization validation
+  const cached = caseCache.get(caseId);
+  if (cached) {
+    let allowed = true;
+    if (workspace && cached.workspaceType !== workspace) allowed = false;
+    const caseOwnerId = (cached.metadata?.user_id as string | undefined) || (cached as { userId?: string }).userId;
+    if (userId) {
+      if (!caseOwnerId || caseOwnerId.toLowerCase() !== userId.toLowerCase()) allowed = false;
+    } else if (ownerToken) {
+      if (caseOwnerId || cached.metadata?.owner_token !== ownerToken) allowed = false;
+    } else {
+      allowed = false;
+    }
+    if (allowed) {
+      return {
+        id: cached.id,
+        title: cached.title,
+        workspaceType: cached.workspaceType,
+        model: cached.model,
+        persona: cached.persona,
+        createdAt: cached.createdAt,
+        updatedAt: cached.updatedAt,
+        lastMessageAt: cached.lastMessageAt,
+        elevenlabsConversationId: cached.elevenlabsConversationId,
+        messages: [...cached.messages],
+        metadata: cached.metadata ? { ...cached.metadata } : undefined,
+      };
+    }
+  }
+
+  // 2. Fallback to Supabase database with parallelized queries
   const supabase = createSupabaseServiceClient();
   if (supabase) {
     try {
-      let query = supabase
+      let sessionQuery = supabase
         .from("chat_sessions")
         .select("id, title, workspace_type, model, persona, created_at, updated_at, last_message_at, elevenlabs_conversation_id, metadata, user_id")
         .eq("id", caseId);
 
       if (workspace) {
-        query = query.eq("workspace_type", workspace);
+        sessionQuery = sessionQuery.eq("workspace_type", workspace);
       }
 
-      const { data: session, error: sessionError } = await query.maybeSingle();
+      const messagesQuery = supabase
+        .from("chat_messages")
+        .select("id, role, content, created_at, metadata")
+        .eq("session_id", caseId)
+        .order("created_at", { ascending: true });
+
+      const [{ data: session, error: sessionError }, { data: messages, error: messagesError }] =
+        await Promise.all([sessionQuery.maybeSingle(), messagesQuery]);
 
       if (sessionError) {
         console.warn("[Repository] Supabase getCase session query error:", sessionError.message);
+      }
+      if (messagesError) {
+        console.warn("[Repository] Supabase getCase chat_messages error:", messagesError.message);
       }
 
       if (!sessionError && session) {
@@ -364,16 +405,6 @@ export async function getCase(
 
         if (!isAuthorized) {
           return null; // Deny access: only the authenticated owner can access this case
-        }
-
-        const { data: messages, error: messagesError } = await supabase
-          .from("chat_messages")
-          .select("id, role, content, created_at, metadata")
-          .eq("session_id", caseId)
-          .order("created_at", { ascending: true });
-
-        if (messagesError) {
-          console.warn("[Repository] Supabase getCase chat_messages error:", messagesError.message);
         }
 
         const parsedMsgs = (!messagesError && messages ? messages : []).map(toChatMessage);
@@ -401,37 +432,6 @@ export async function getCase(
     } catch (err) {
       console.warn("[Repository] Supabase getCase error, falling back to cache:", err);
     }
-  }
-
-  // Fallback to bounded in-memory cache if Supabase is unavailable or in offline mode
-  const cached = caseCache.get(caseId);
-  if (cached) {
-    let allowed = true;
-    if (workspace && cached.workspaceType !== workspace) allowed = false;
-    const caseOwnerId = (cached.metadata?.user_id as string | undefined) || (cached as { userId?: string }).userId;
-    if (userId) {
-      if (!caseOwnerId || caseOwnerId.toLowerCase() !== userId.toLowerCase()) allowed = false;
-    } else if (ownerToken) {
-      if (caseOwnerId || cached.metadata?.owner_token !== ownerToken) allowed = false;
-    } else {
-      allowed = false;
-    }
-    if (allowed) {
-      return {
-        id: cached.id,
-        title: cached.title,
-        workspaceType: cached.workspaceType,
-        model: cached.model,
-        persona: cached.persona,
-        createdAt: cached.createdAt,
-        updatedAt: cached.updatedAt,
-        lastMessageAt: cached.lastMessageAt,
-        elevenlabsConversationId: cached.elevenlabsConversationId,
-        messages: [...cached.messages],
-        metadata: cached.metadata,
-      };
-    }
-    return null;
   }
 
   return null;
