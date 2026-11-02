@@ -17,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: "For Doctors — Oracle AI Clinical Copilot & Decision Support",
   description:
-    "Oracle empowers physicians with multi-model differential diagnostic reasoning, clinical guidelines synthesis, risk stratification (CRB-65, Wells), and SOAP documentation.",
+    "Oracle clinical copilot empowers verified physicians with multi-model differential diagnostic reasoning, clinical risk scores, and documentation support.",
   keywords: [
     "AI clinical copilot for doctors",
     "clinical decision support software",

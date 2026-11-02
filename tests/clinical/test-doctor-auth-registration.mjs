@@ -58,7 +58,7 @@ test("Doctor Authentication & Registration Number Validation", async (t) => {
   });
 
   await t.test("Patient registration sequence succeeds without requiring Doctor Registration Number", () => {
-    function validatePatientRegistration({ email, password, fullName, role }) {
+    function validatePatientRegistration({ email, password, fullName }) {
       if (!email || !password || !fullName) {
         return { valid: false, error: "Missing required fields" };
       }

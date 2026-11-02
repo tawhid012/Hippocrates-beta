@@ -17,6 +17,33 @@ export function JsonLd({ schema }: { schema: Record<string, unknown> | Array<Rec
 }
 
 /**
+ * SoftwareApplication Schema (Primary App Entity)
+ */
+export const SOFTWARE_APPLICATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Hippocrates",
+  url: "https://hippocrates.in",
+  applicationCategory: "HealthApplication",
+  operatingSystem: "Android, Web",
+  description: "An AI Clinical Platform featuring dual engines: Aegis and Oracle.",
+  creator: {
+    "@type": "Person",
+    name: "Tawhid Laskar",
+    jobTitle: "Full-Stack Web Developer",
+    address: {
+      "@type": "PostalAddress",
+      addressRegion: "Assam",
+      addressCountry: "India",
+    },
+  },
+};
+
+export function getSoftwareApplicationJsonLd() {
+  return SOFTWARE_APPLICATION_JSON_LD;
+}
+
+/**
  * Organization Schema
  * Represents Hippocrates as an AI health technology organization.
  */
@@ -36,6 +63,12 @@ export function getOrganizationJsonLd() {
       caption: "Hippocrates AI Logo",
     },
     description: SITE_CONFIG.description,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Hailakandi",
+      addressRegion: "Assam",
+      addressCountry: "India",
+    },
     knowsAbout: [
       "Artificial Intelligence in Healthcare",
       "Clinical Decision Support",
@@ -44,10 +77,21 @@ export function getOrganizationJsonLd() {
     founder: [
       {
         "@type": "Person",
-        "@id": `${getAbsoluteUrl("/about")}#tawhidur-rahman-laskar`,
-        name: "Tawhidur Rahman Laskar",
-        jobTitle: "Founder & Architecture Lead",
-        sameAs: ["https://github.com/tawhid012"],
+        "@id": `${getAbsoluteUrl("/about")}#tawhid-laskar`,
+        name: "Tawhid Laskar",
+        alternateName: "Tawhidur Rahman Laskar",
+        jobTitle: "Founder & Full-Stack Web Developer",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Hailakandi",
+          addressRegion: "Assam",
+          addressCountry: "India",
+        },
+        sameAs: [
+          SITE_CONFIG.socials.github,
+          SITE_CONFIG.socials.twitter,
+          SITE_CONFIG.socials.linkedin,
+        ].filter(Boolean) as string[],
       },
       {
         "@type": "Person",
@@ -71,9 +115,47 @@ export function getOrganizationJsonLd() {
       },
     ],
     sameAs: [
-      // Only include verified canonical external identity sources
       SITE_CONFIG.socials.github,
-    ].filter(Boolean),
+      SITE_CONFIG.socials.twitter,
+      SITE_CONFIG.socials.linkedin,
+    ].filter(Boolean) as string[],
+  };
+}
+
+/**
+ * Person Schema for Tawhid Laskar (Founder & Developer)
+ */
+export function getPersonJsonLd() {
+  const siteUrl = getAbsoluteUrl("/");
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": `${getAbsoluteUrl("/about")}#tawhid-laskar`,
+    name: "Tawhid Laskar",
+    alternateName: "Tawhidur Rahman Laskar",
+    jobTitle: "Full-Stack Web Developer & AI System Architect",
+    worksFor: {
+      "@type": "Organization",
+      name: "Hippocrates AI",
+      url: siteUrl,
+    },
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Hailakandi",
+      addressRegion: "Assam",
+      addressCountry: "India",
+    },
+    sameAs: [
+      SITE_CONFIG.socials.github,
+      SITE_CONFIG.socials.twitter,
+      SITE_CONFIG.socials.linkedin,
+    ].filter(Boolean) as string[],
+    knowsAbout: [
+      "Artificial Intelligence in Healthcare",
+      "Clinical Decision Support",
+      "Full-Stack Web Development",
+      "Next.js Architecture",
+    ],
   };
 }
 

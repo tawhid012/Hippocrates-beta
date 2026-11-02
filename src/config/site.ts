@@ -44,8 +44,8 @@ export const SITE_CONFIG: SiteConfig = {
   legalName: "Hippocrates AI Health Technologies",
   tagline: "AI for Better-Informed Healthcare",
   description:
-    "Discover Hippocrates, an AI-powered healthcare ecosystem featuring Aegis for patient-focused health information and report understanding, and Oracle for doctor-focused clinical support. Built around a vision of AI for Accessible Health Awareness.",
-  productionDomain: "https://www.hippocrates.in",
+    "Hippocrates is an independent AI clinical platform developed by Tawhid Laskar in Assam, India. Featuring the Aegis patient assistant and Oracle clinical copilot.",
+  productionDomain: "https://hippocrates.in",
   socials: {
     github: "https://github.com/tawhid012/Hippocrates-beta",
     twitter: "https://twitter.com/hippocrates_ai",
@@ -55,11 +55,11 @@ export const SITE_CONFIG: SiteConfig = {
     email: "contact@hippocrates.in",
     supportEmail: "support@hippocrates.in",
     clinicalInquiries: "clinical@hippocrates.in",
-    location: "India",
+    location: "Assam, India",
   },
   founders: [
     {
-      name: "Tawhidur Rahman Laskar",
+      name: "Tawhid Laskar",
       role: "Founder",
       title: "Architecture & System Lead",
     },

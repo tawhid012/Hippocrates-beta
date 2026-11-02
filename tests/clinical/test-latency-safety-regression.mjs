@@ -4,7 +4,6 @@ import { evaluateSafety } from "../../src/lib/aegis/safety.ts";
 import {
   createCleanCaseState,
   extractInstantaneousCaseUpdates,
-  determineAssessmentStatusFromResponse,
   validateCaseStateIsolation,
 } from "../../src/services/aegis/aegisCaseState.ts";
 import { createHash } from "node:crypto";

@@ -21,7 +21,7 @@ import {
 export const metadata: Metadata = {
   title: "Aegis — Patient-Facing AI Assistant | HIPPOCRATES",
   description:
-    "Aegis is a patient-facing AI assistant within HIPPOCRATES that helps you explore health concerns, understand medical reports, organise symptoms, and prepare for doctor visits.",
+    "Hippocrates Aegis is an AI patient assistant. Understand lab reports, organize symptoms using clinical frameworks, and prepare for doctor consultations.",
   keywords: [
     "Patient-facing healthcare AI assistant",
     "AI health information assistant",

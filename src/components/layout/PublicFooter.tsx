@@ -68,10 +68,12 @@ export function PublicFooter() {
         </div>
 
         <div className="pt-8 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400 text-xs">
-          <span>© 2026 Hippocrates AI. All rights reserved.</span>
-          <span className="flex items-center gap-1.5">
+          <p className="leading-relaxed text-center sm:text-left max-w-3xl">
+            © 2026 Hippocrates AI. All rights reserved. Developed by Tawhid Laskar in Hailakandi, Assam, India. Built for responsible healthcare intelligence.
+          </p>
+          <span className="flex items-center gap-1.5 shrink-0 text-slate-400">
             <HeartPulse className="h-3.5 w-3.5 text-blue-400" />
-            <span>Built for responsible healthcare intelligence</span>
+            <span>Assam, India</span>
           </span>
         </div>
       </div>

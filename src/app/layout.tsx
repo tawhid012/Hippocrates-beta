@@ -2,42 +2,28 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { AppProvider } from "@/hooks/useAppContext";
-import { SITE_CONFIG, getSiteUrl, isPreviewDeployment } from "@/config/site";
-import { JsonLd, getOrganizationJsonLd, getWebSiteJsonLd } from "@/components/seo/JsonLd";
+import { isPreviewDeployment } from "@/config/site";
+import { JsonLd, getOrganizationJsonLd, getWebSiteJsonLd, SOFTWARE_APPLICATION_JSON_LD } from "@/components/seo/JsonLd";
 
-const siteUrl = getSiteUrl();
+const siteUrl = "https://hippocrates.in";
 const isPreview = isPreviewDeployment();
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Hippocrates — AI for Better-Informed Healthcare",
-    template: "%s | Hippocrates",
+    default: "Hippocrates AI - Dual-Engine Clinical Intelligence by Tawhid Laskar",
+    template: "%s | Hippocrates AI",
   },
-  description: SITE_CONFIG.description,
+  description:
+    "Hippocrates is an independent AI clinical platform developed by Tawhid Laskar in Assam, India. Featuring the Aegis patient assistant and Oracle clinical copilot.",
   applicationName: "Hippocrates AI",
-  authors: SITE_CONFIG.founders.map((f) => ({ name: f.name })),
+  authors: [{ name: "Tawhid Laskar" }],
   generator: "Next.js",
-  keywords: [
-    "Hippocrates AI",
-    "Hippocrates healthcare AI",
-    "Hippocrates app",
-    "Hippocrates Aegis",
-    "Hippocrates Oracle",
-    "AI clinical copilot",
-    "AI health assistant",
-    "medical report explanation",
-    "understanding blood test reports",
-    "preparing questions for a doctor",
-    "clinical decision support software",
-    "AI medical documentation",
-    "AI tools for doctors",
-    "responsible AI in healthcare",
-    "accessible health awareness",
-  ],
+  keywords:
+    "hippocrates tawhid, hippocrates assam, hippocrates india, hippocrates ai assam, tawhid laskar, aegis oracle clinical platform",
   referrer: "origin-when-cross-origin",
-  creator: SITE_CONFIG.legalName,
-  publisher: SITE_CONFIG.legalName,
+  creator: "Tawhid Laskar",
+  publisher: "Tawhid Laskar",
   formatDetection: {
     email: false,
     address: false,
@@ -49,24 +35,26 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: siteUrl,
-    siteName: SITE_CONFIG.name,
-    title: "Hippocrates — AI for Better-Informed Healthcare",
-    description: SITE_CONFIG.description,
+    url: "https://hippocrates.in",
+    siteName: "Hippocrates AI",
+    title: "Hippocrates AI by Tawhid Laskar",
+    description:
+      "Responsible healthcare intelligence built in Assam, India by web developer Tawhid Laskar.",
     images: [
       {
         url: "/hippocrates-og.png",
         width: 1024,
         height: 536,
-        alt: "Hippocrates — AI for Better-Informed Healthcare. Aegis for Patients and Oracle for Clinicians.",
+        alt: "Hippocrates AI - Dual-Engine Clinical Intelligence by Tawhid Laskar",
         type: "image/png",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Hippocrates — AI for Better-Informed Healthcare",
-    description: SITE_CONFIG.description,
+    title: "Hippocrates AI by Tawhid Laskar",
+    description:
+      "Responsible healthcare intelligence built in Assam, India by web developer Tawhid Laskar.",
     images: ["/hippocrates-og.png"],
     creator: "@hippocrates_ai",
   },
@@ -127,6 +115,12 @@ export default function RootLayout({
       <head>
         <JsonLd schema={organizationJsonLd} />
         <JsonLd schema={webSiteJsonLd} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(SOFTWARE_APPLICATION_JSON_LD),
+          }}
+        />
       </head>
       <body className="min-h-full antialiased bg-[#fcfdfe] text-slate-900" suppressHydrationWarning>
         <AuthProvider>

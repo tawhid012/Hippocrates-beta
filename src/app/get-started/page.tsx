@@ -7,7 +7,7 @@ import { AppDownloadClient } from "@/components/download/AppDownloadClient";
 export const metadata: Metadata = {
   title: "Download Hippocrates for Android (Official APK) — Hippocrates AI",
   description:
-    "Download the official Hippocrates Android application (APK). Access dual-engine clinical intelligence, symptom education, and medical report explanations on your Android smartphone.",
+    "Download the Hippocrates Android app or install the PWA on iOS, Android, and desktop. Dual-engine clinical intelligence developed by Tawhid Laskar.",
   keywords: [
     "Hippocrates Android app",
     "download Hippocrates APK",

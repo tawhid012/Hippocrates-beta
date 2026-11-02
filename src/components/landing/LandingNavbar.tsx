@@ -2,19 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, ArrowRight, Stethoscope, HeartPulse } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { HippocratesLogo } from "./HippocratesLogo";
 import { Button } from "@/components/ui/button";
 
 interface LandingNavbarProps {
-  onSelectPersona: (persona: "doctor" | "patient") => void;
+  onSelectPersona?: (persona: "doctor" | "patient") => void;
   onOpenGetStarted: () => void;
-  onOpenAbout: () => void;
-  onOpenContact: () => void;
+  onOpenAbout?: () => void;
+  onOpenContact?: () => void;
 }
 
 export function LandingNavbar({
-  onSelectPersona,
   onOpenGetStarted,
 }: LandingNavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

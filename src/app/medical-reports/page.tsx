@@ -13,7 +13,7 @@ import {
 export const metadata: Metadata = {
   title: "Understanding Medical Reports & Blood Tests — Educational Guide",
   description:
-    "Learn how to understand your blood test reports: Complete Blood Count (CBC), Lipid Profile, Thyroid Panel, Liver & Kidney Function Tests. Demystifying laboratory reference ranges.",
+    "Learn how to understand blood test reports: Complete Blood Count (CBC), Lipid, Thyroid, Liver, and Kidney tests. Demystifying lab reference ranges.",
   keywords: [
     "understanding blood test reports",
     "medical report explanation",

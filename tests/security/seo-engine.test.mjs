@@ -33,14 +33,22 @@ describe("Hippocrates SEO & Canonical Architecture Suite", () => {
       {
         source: "/:path*",
         has: [{ type: "host", value: "hippocrates-beta.vercel.app" }],
-        destination: "https://www.hippocrates.in/:path*",
+        destination: "https://hippocrates.in/:path*",
+        permanent: true,
+      },
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.hippocrates.in" }],
+        destination: "https://hippocrates.in/:path*",
         permanent: true,
       },
     ];
 
     assert.equal(redirects[0].has[0].value, "hippocrates-beta.vercel.app");
-    assert.equal(redirects[0].destination, "https://www.hippocrates.in/:path*");
+    assert.equal(redirects[0].destination, "https://hippocrates.in/:path*");
     assert.equal(redirects[0].permanent, true);
+    assert.equal(redirects[1].has[0].value, "www.hippocrates.in");
+    assert.equal(redirects[1].destination, "https://hippocrates.in/:path*");
   });
 
   test("Homepage title communicates brand and official website identity", () => {

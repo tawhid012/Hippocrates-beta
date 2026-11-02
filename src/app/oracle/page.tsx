@@ -18,7 +18,7 @@ import {
 export const metadata: Metadata = {
   title: "Oracle — Doctor-Focused Clinical Support & Decision Reasoning",
   description:
-    "Explore Oracle by Hippocrates: a doctor-focused clinical copilot designed to support clinical workflows, differential reasoning, and documentation for verified clinicians.",
+    "Hippocrates Oracle is a clinical AI copilot for verified physicians. Multi-model differential reasoning, guideline synthesis, and documentation support.",
   keywords: [
     "Hippocrates Oracle",
     "AI clinical copilot",

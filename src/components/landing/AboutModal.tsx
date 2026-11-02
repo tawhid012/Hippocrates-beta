@@ -61,9 +61,9 @@ export function AboutModal({ open, onOpenChange }: AboutModalProps) {
           </div>
         </div>
 
-        <div className="pt-2 text-center border-t border-slate-100">
-          <p className="text-xs text-slate-400">
-            © 2026 Hippocrates AI Platform. All rights reserved.
+        <div className="pt-3 pb-1 text-center border-t border-slate-100">
+          <p className="text-xs text-slate-400 leading-relaxed">
+            © 2026 Hippocrates AI. All rights reserved. Developed by Tawhid Laskar in Hailakandi, Assam, India. Built for responsible healthcare intelligence.
           </p>
         </div>
       </DialogContent>

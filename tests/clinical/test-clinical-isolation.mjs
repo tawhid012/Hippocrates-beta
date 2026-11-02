@@ -8,7 +8,6 @@ import {
   extractInstantaneousCaseUpdates,
   createCleanCaseState,
   validateCaseStateIsolation,
-  EMPTY_CASE_STATE,
 } from "../../src/services/aegis/aegisCaseState.ts";
 
 // Consultation isolation logic as implemented in consultationStorage.ts
@@ -136,14 +135,6 @@ console.log("  ✓ TEST B PASSED: Stale conversation messages quarantined before
 // TEST C — Previous summary contamination: Summary & Doctor Note isolation
 // ---------------------------------------------------------------------------
 console.log("TEST C: Summary & Doctor Note Isolation");
-
-const summaryA = {
-  documentId: "doc-summary-A",
-  conversationId: consultationIdA,
-  status: "COMPLETE",
-  chiefComplaint: "Lower right abdominal pain",
-  doctorHandoff: "Dr. Note: Patient presents with suspected RLQ pain...",
-};
 
 // When New Consultation B is active, summary must be null
 let activeSummaryForB = null;

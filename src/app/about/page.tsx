@@ -5,16 +5,20 @@ import { PublicFooter } from "@/components/layout/PublicFooter";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { TeamMemberCard, type TeamMember } from "@/components/about/TeamMemberCard";
-import { JsonLd, getOrganizationJsonLd } from "@/components/seo/JsonLd";
+import { JsonLd, getOrganizationJsonLd, getPersonJsonLd } from "@/components/seo/JsonLd";
 import { Sparkles, Award, ArrowUpRight, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "About Hippocrates AI — Mission, Team & Project History",
   description:
-    "Learn about Hippocrates AI: founded by Tawhidur Rahman Laskar and Ahmed Al-Ferdous under academic guidance from Abdul Basith Barbhuiya for the National Children's Science Congress (NCSC).",
+    "Learn about Hippocrates AI: founded by Tawhid Laskar and Ahmed Al-Ferdous under academic guidance from Abdul Basith Barbhuiya for the National Children's Science Congress (NCSC) in Assam, India.",
   keywords: [
+    "hippocrates tawhid",
+    "hippocrates assam",
+    "hippocrates india",
+    "hippocrates ai assam",
+    "tawhid laskar",
     "About Hippocrates AI",
-    "Tawhidur Rahman Laskar",
     "Ahmed Al-Ferdous",
     "Abdul Basith Barbhuiya",
     "Hippocrates team",
@@ -27,22 +31,22 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About Hippocrates AI — Mission, Team & Project History",
     description:
-      "The story, research mission, and team behind Hippocrates: dual-engine healthcare AI developed for the National Children's Science Congress.",
+      "The story, research mission, and team behind Hippocrates: dual-engine healthcare AI developed by Tawhid Laskar in Assam, India.",
     url: "/about",
   },
 };
 
 const TEAM_MEMBERS: TeamMember[] = [
   {
-    name: "Tawhidur Rahman Laskar",
+    name: "Tawhid Laskar",
     role: "Founder",
     roleBadge: "Founder",
     roleBadgeColor: "bg-blue-50 text-blue-700 border-blue-200/80",
-    tagline: "Architecture & System Lead",
+    tagline: "Architecture & System Lead • Hailakandi, Assam, India",
     description:
-      "Conceptualized and led the development of HIPPOCRATES, architecting its dual-engine clinical AI models and patient-facing conversational experience.",
+      "Conceptualized and led the development of HIPPOCRATES in Assam, India, architecting its dual-engine clinical AI models and patient-facing conversational experience.",
     imageSrc: "/team/tawhidur-rahman-laskar.png",
-    imageAlt: "Tawhidur Rahman Laskar — Founder of HIPPOCRATES",
+    imageAlt: "Tawhid Laskar — Founder of HIPPOCRATES",
     imagePositionClass: "object-[50%_24%]",
   },
   {
@@ -74,10 +78,11 @@ const TEAM_MEMBERS: TeamMember[] = [
 
 export default function AboutPage() {
   const organizationJsonLd = getOrganizationJsonLd();
+  const personJsonLd = getPersonJsonLd();
 
   return (
     <div className="min-h-screen bg-[#fcfdfe] text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900 flex flex-col justify-between">
-      <JsonLd schema={organizationJsonLd} />
+      <JsonLd schema={[organizationJsonLd, personJsonLd]} />
       <div>
         <PublicNavbar />
         <Breadcrumbs items={[{ label: "About Hippocrates", href: "/about" }]} />
@@ -206,6 +211,13 @@ export default function AboutPage() {
                   </Button>
                 </Link>
               </div>
+            </div>
+
+            {/* Copyright & Credit Line */}
+            <div className="mt-12 pt-6 border-t border-slate-200/80 text-center">
+              <p className="text-xs text-slate-500 leading-relaxed max-w-2xl mx-auto">
+                © 2026 Hippocrates AI. All rights reserved. Developed by Tawhid Laskar in Hailakandi, Assam, India. Built for responsible healthcare intelligence.
+              </p>
             </div>
           </div>
         </section>

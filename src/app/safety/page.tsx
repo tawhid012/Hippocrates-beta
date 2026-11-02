@@ -4,7 +4,7 @@ import { PublicNavbar } from "@/components/layout/PublicNavbar";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
-import { JsonLd, getMedicalWebPageJsonLd } from "@/components/seo/JsonLd";
+import { JsonLd, getMedicalWebPageJsonLd, getFaqJsonLd } from "@/components/seo/JsonLd";
 import {
   ShieldCheck,
   AlertTriangle,
@@ -40,6 +40,29 @@ export const metadata: Metadata = {
   },
 };
 
+const SAFETY_FAQS = [
+  {
+    question: "Does Hippocrates AI provide autonomous medical diagnoses?",
+    answer:
+      "No. Hippocrates does not provide autonomous diagnoses or prescribe medications. Aegis provides general health education and consultation preparation for patients, while Oracle functions strictly as clinical decision support for licensed medical practitioners.",
+  },
+  {
+    question: "How does Hippocrates handle acute medical emergencies?",
+    answer:
+      "When red-flag symptoms such as crushing chest pain, acute neurological deficits, shortness of breath, or severe hemorrhage are detected, conversational exploration halts immediately, and users are directed to contact local emergency medical services (108/112 in India, 911 in the US) or visit the nearest emergency room.",
+  },
+  {
+    question: "Are patient health conversations private and encrypted?",
+    answer:
+      "Yes. Patient records are encrypted with AES-256 and isolated via strict database row-level security. Healthcare conversations and clinical data are never sold, monetized, or shared with third-party advertisers.",
+  },
+  {
+    question: "How are physicians verified on Hippocrates Oracle?",
+    answer:
+      "Physicians must provide an active, valid Medical Council Registration Number during onboarding. Oracle clinical copilot features are strictly restricted to verified healthcare professionals.",
+  },
+];
+
 export default function SafetyPage() {
   const safetyJsonLd = getMedicalWebPageJsonLd({
     title: "Responsible Healthcare AI & Safety Principles — Hippocrates",
@@ -54,9 +77,11 @@ export default function SafetyPage() {
     ],
   });
 
+  const faqJsonLd = getFaqJsonLd(SAFETY_FAQS);
+
   return (
     <div className="min-h-screen bg-[#fcfdfe] text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900 flex flex-col justify-between">
-      <JsonLd schema={safetyJsonLd} />
+      <JsonLd schema={[safetyJsonLd, faqJsonLd]} />
       <div>
         <PublicNavbar />
         <Breadcrumbs items={[{ label: "Safety & Responsible AI", href: "/safety" }]} />
