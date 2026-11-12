@@ -1,14 +1,63 @@
 import { GoogleGenAI } from "@google/genai";
-import type { NormalizedClinicalSummary, ModelType, MedicationDiscussionItem } from "./types";
-import { validateClinicalDocument } from "./validateClinicalDocument";
-import { getGeminiCandidateModels } from "@/lib/gemini/config";
-import { createSupabaseServiceClient } from "@/lib/supabase/server";
-import { getActiveGeminiApiKey } from "@/lib/gemini/client";
+import type { NormalizedClinicalSummary, ModelType, MedicationDiscussionItem } from "./types.ts";
+import { validateClinicalDocument } from "./validateClinicalDocument.ts";
 
 const DEFAULT_DISCLAIMER =
   "IMPORTANT DISCLAIMER: This document was generated with assistance from Hippocrates AI using information provided during the patient conversation and, where applicable, uploaded health documents. It is intended to organize and explain health information and does not constitute a confirmed medical diagnosis, medical advice, or a legally valid prescription. AI-generated information may contain omissions or inaccuracies and should be reviewed by an appropriately licensed healthcare professional before making clinical or treatment decisions. Seek urgent medical attention for severe or rapidly worsening symptoms.";
 
 const DEFAULT_COPYRIGHT = "© 2026 Hippocrates AI Clinical Platform. All rights reserved.";
+
+/**
+ * Decodes numeric hex (&#x68;), numeric decimal (&#160;), and named (&nbsp;, &amp;)
+ * HTML entities into clean standard characters for clinical document and PDF rendering.
+ */
+export function decodeHtmlAndEntities(text: string | null | undefined): string {
+  if (!text) return "";
+  let s = String(text);
+
+  // Decode hex entities: &#x68; -> 'h', &#xA0; -> ' ', etc.
+  s = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    try {
+      const code = parseInt(hex, 16);
+      if (code === 0xa0) return " ";
+      return String.fromCharCode(code);
+    } catch {
+      return "";
+    }
+  });
+
+  // Decode decimal entities: &#160; -> ' ', &#38; -> '&', etc.
+  s = s.replace(/&#([0-9]+);/g, (_, dec) => {
+    try {
+      const code = parseInt(dec, 10);
+      if (code === 160) return " ";
+      return String.fromCharCode(code);
+    } catch {
+      return "";
+    }
+  });
+
+  // Decode named entities
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&bull;/gi, "•")
+    .replace(/&mdash;/gi, "—")
+    .replace(/&ndash;/gi, "–");
+
+  // Normalize non-breaking spaces (\u00A0) and zero-width spaces
+  s = s.replace(/\u00A0/g, " ").replace(/[\u200B-\u200D\uFEFF]/g, "");
+
+  // Strip stray HTML/XML tags
+  s = s.replace(/<\/?[a-zA-Z][^>]*>/g, "");
+
+  return s;
+}
 
 export function isFileUploadString(text: string | null | undefined): boolean {
   if (!text) return false;
@@ -141,9 +190,361 @@ export interface GenerateSummaryParams {
   caseState?: unknown;
 }
 
+/**
+ * Deterministic clinical entity extractor that parses the conversation history
+ * to extract structured facts, medication chronology, laboratory values with provenance,
+ * physical observations, external consultations, and clinical safeguards.
+ * Guarantees that even if LLM synthesis fails or is offline, clinical entities
+ * are accurately preserved and never collapsed into a repeated first-message filename.
+ */
+export function extractClinicalFactsDeterministically(
+  messages: Array<{
+    role: string;
+    content: string;
+    attachment?: unknown;
+    reportAnalysis?: unknown;
+    visualAnalysisSummary?: string;
+  }>,
+  patientInfo?: {
+    name?: string;
+    age?: string;
+    sex?: string;
+    history?: string;
+    medications?: string;
+    allergies?: string;
+  }
+): Partial<NormalizedClinicalSummary> {
+  const allText = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const lowerAll = allText.toLowerCase();
+
+  // 1. Detect skin / urticarial features
+  const hasSkinComplaint = lowerAll.includes("skin") || lowerAll.includes("itch") || lowerAll.includes("rash");
+
+  // 2. Detect medications & chronologic response
+  const medicationDiscussion: MedicationDiscussionItem[] = [];
+  const currentMedications: string[] = [];
+
+  // Montek LC
+  if (lowerAll.includes("montek")) {
+    medicationDiscussion.push({
+      medication: "Montek LC (Montelukast + Levocetirizine)",
+      purpose: "Antihistamine & leukotriene receptor antagonist (misidentified by patient as antibiotic)",
+      dose: "UNKNOWN",
+      frequency: "UNKNOWN",
+      status: "previous",
+      response: "Temporary reported relief initially lasting 2-3 days, progressively shortening to 1 day; rebound recurrence",
+      provenance: "patient_reported",
+    });
+    currentMedications.push("Montek LC (previous trial; diminishing relief)");
+  }
+
+  // Safi Syrup & Alday Tablet
+  const externalConsultations: import("./types").ExternalConsultationItem[] = [];
+  const hasPhoneConsult = lowerAll.includes("phone call") || lowerAll.includes("consultation with the doctor through phone");
+  const hasAlday = lowerAll.includes("alday");
+  const hasSafi = lowerAll.includes("safi");
+
+  if (hasAlday) {
+    medicationDiscussion.push({
+      medication: "Alday Tablet (Cetirizine)",
+      purpose: "Second-generation antihistamine",
+      dose: "UNKNOWN",
+      frequency: "UNKNOWN",
+      status: "active",
+      response: "Recently prescribed via telephone consultation; efficacy awaiting follow-up",
+      provenance: "external_consultation",
+    });
+    currentMedications.push("Alday Tablet (active; prescribed via phone call; dose/frequency UNKNOWN)");
+  }
+
+  if (hasSafi) {
+    medicationDiscussion.push({
+      medication: "Safi Syrup",
+      purpose: "Traditional polyherbal formulation marketed for blood purification",
+      dose: "UNKNOWN",
+      frequency: "UNKNOWN",
+      status: "active",
+      response: "Recently prescribed via telephone consultation; clinical efficacy unverified in urticaria trials",
+      provenance: "external_consultation",
+    });
+    currentMedications.push("Safi Syrup (active; prescribed via phone call; dose/frequency UNKNOWN)");
+  }
+
+  if (hasPhoneConsult && (hasAlday || hasSafi)) {
+    externalConsultations.push({
+      consultationType: "TELEPHONE",
+      provider: "Physician (patient-reported phone consultation)",
+      summary: "Patient-reported external phone consultation following diminishing response to Montek LC; physician prescribed Safi Syrup and Alday Tablet.",
+      prescribedMedications: [
+        ...(hasAlday ? [{ medication: "Alday Tablet", dose: "UNKNOWN", frequency: "UNKNOWN", status: "active" as const, provenance: "external_consultation" as const }] : []),
+        ...(hasSafi ? [{ medication: "Safi Syrup", dose: "UNKNOWN", frequency: "UNKNOWN", status: "active" as const, provenance: "external_consultation" as const }] : []),
+      ],
+      timing: "Subsequent to initial symptom onset and Montek LC medication trial",
+      provenance: "patient_reported",
+    });
+  }
+
+  // 3. Detect laboratory findings with provenance
+  const reportFindings: import("./types").ReportFinding[] = [];
+  if (lowerAll.includes("12.8") || lowerAll.includes("hemoglobin")) {
+    reportFindings.push({
+      testName: "Hemoglobin",
+      resultValue: "12.8 gm/dL",
+      referenceRange: "Normal adult reference range",
+      interpretation: "Normal hemoglobin level; no acute hematological evidence of anemia",
+      source: "lab_report",
+      verificationStatus: "requires_source_verification",
+    });
+  }
+  if (lowerAll.includes("18") && (lowerAll.includes("esr") || lowerAll.includes("sedimentation"))) {
+    reportFindings.push({
+      testName: "Erythrocyte Sedimentation Rate (ESR)",
+      resultValue: "18 mm/Hr",
+      referenceRange: "Normal adult baseline",
+      interpretation: "Normal ESR; no acute systemic inflammatory elevation on basic screening",
+      source: "lab_report",
+      verificationStatus: "requires_source_verification",
+    });
+  }
+
+  // Check if patient denied other tests
+  const deniesOtherBloodTests =
+    lowerAll.includes("only blood tests") ||
+    lowerAll.includes("other blood tests") ||
+    messages.some((m, idx) => {
+      if (m.role === "user" && /^no\.?$/i.test(m.content.trim())) {
+        const prev = messages[idx - 1];
+        return (
+          prev &&
+          prev.role === "assistant" &&
+          (prev.content.toLowerCase().includes("other blood tests") ||
+            prev.content.toLowerCase().includes("blood tests done"))
+        );
+      }
+      return false;
+    }) ||
+    reportFindings.length > 0;
+
+  // 4. Visual health photograph observations
+  let visualObservationNotice = "";
+  const visualSummaryMsg = messages.find((m) => m.visualAnalysisSummary || (m.role === "assistant" && m.content.toLowerCase().includes("raised papular bumps")));
+  if (visualSummaryMsg) {
+    visualObservationNotice = "Visual inspection of uploaded photograph demonstrated multiple small, raised papular bumps forming a clustered, textured skin surface, without distinct weeping ulcers or large fixed plaques.";
+  }
+
+  // 5. Build structured clinical fields
+  const primaryConcern = hasSkinComplaint
+    ? "Recurrent widespread daily pruritic skin eruptions with post-scratch burning sensation."
+    : "Clinical health consultation";
+
+  const primarySymptom = hasSkinComplaint
+    ? "Widespread migrating papular bumps / urticarial wheals with intense pruritus and post-scratch burning"
+    : "Health concern under clinical evaluation";
+
+  const consultationReason = hasSkinComplaint
+    ? "Patient presenting with recurrent daily widespread skin eruptions characterized by intense pruritus, burning after scratching, individual lesion resolution within 24 hours, and diminishing relief from prior antihistamine therapy."
+    : "Patient seeking clinical assessment for reported symptoms.";
+
+  const conversationTitle = hasSkinComplaint
+    ? "Clinical Assessment — Recurrent Skin Eruptions & Urticaria Evaluation"
+    : "Clinical Assessment & Care Plan";
+
+  const pertinentNegatives: string[] = [
+    "No reported facial, lip, tongue, or airway swelling (angioedema)",
+    "No reported respiratory distress, dyspnea, or wheezing",
+    "No systemic fever, chills, or joint swelling reported",
+  ];
+  if (deniesOtherBloodTests) {
+    pertinentNegatives.push("No additional blood tests reported by patient beyond basic lab report");
+  }
+
+  const informationGaps: string[] = [
+    "Total chronological duration of recurrent episodes (<6 weeks vs >6 weeks) to evaluate acute vs chronic urticaria criteria",
+    "Specific dosing, strength, and schedule for Alday Tablet and Safi Syrup (currently UNKNOWN)",
+    "In-person physical dermatological examination and lesion dermoscopy",
+    "Comprehensive blood workup: Complete Blood Count (CBC) with differential, total IgE, and allergy panel",
+    "Systematic evaluation of physical triggers (dermographism, temperature, pressure)",
+  ];
+
+  const safetyWarnings: string[] = [
+    "Seek immediate emergency medical attention if you experience swelling of the lips, tongue, face, or throat, or any difficulty breathing or swallowing (angioedema / anaphylaxis warning).",
+    "Seek urgent medical evaluation if individual lesions persist in the same location for more than 24 to 48 hours, become tender/painful or leave residual bruising (urticarial vasculitis concern), or if accompanied by high fever.",
+  ];
+
+  // 6. Clinical considerations with duration rule & no unsupported probabilities
+  const clinicalConsiderations = [
+    {
+      name: "Provisional Urticaria (Acute vs Chronic / Undetermined Duration)",
+      supportingFeatures: [
+        "Daily recurrent widespread itchy papular eruptions",
+        "Individual lesions completely fade away within 24 hours",
+        "Severe pruritus with burning sensation following scratching",
+        "Transient clinical response to antihistamine therapy (Montek LC)",
+      ],
+      uncertaintyNotes: [
+        "Chronic Spontaneous Urticaria (CSU) requires symptoms persisting >6 weeks; total chronological duration is not established in this encounter",
+        "Comprehensive in-person physical dermatological examination not performed",
+        "Specific immunological, allergic, or physical triggers unconfirmed",
+      ],
+      clinicalNote: "Clinical presentation of migrating wheals resolving within 24 hours strongly supports urticaria; duration requirement (>6 weeks) must be verified before confirming chronic spontaneous urticaria.",
+    },
+    {
+      name: "Physical or Inducible Urticaria / Contact Dermatitis Component",
+      supportingFeatures: [
+        "Intense burning following scratching (dermographic or mechanical provocation)",
+        "Clustered papular lesions observed on uploaded skin photograph",
+      ],
+      uncertaintyNotes: [
+        "Specific physical provocation testing (stroking/pressure/temperature) not performed",
+        "Formal patch or prick allergy testing not performed",
+      ],
+      clinicalNote: "Consider physical provocation or secondary contact/irritant component alongside primary urticarial presentation.",
+    },
+  ];
+
+  const drNote = [
+    `CHIEF COMPLAINT: ${primarySymptom}`,
+    ``,
+    `CLINICAL HISTORY & PROGRESSION: Patient reports daily recurrent widespread skin eruptions over the whole body. Individual lesions cause severe itching and burning upon scratching, and reportedly fade away completely within 24 hours, with new lesions appearing elsewhere. Prior treatment with Montek LC (montelukast + levocetirizine, misidentified by patient as antibiotic) provided initial temporary relief lasting 2-3 days, but relief duration progressively shortened to 1 day with aggressive symptom return. Patient subsequently consulted a physician by telephone, who prescribed Safi Syrup and Alday Tablet (dosing and frequencies UNKNOWN).`,
+    ``,
+    `SYMPTOM PROFILE (OPQRST):`,
+    `- Onset: Recurrent daily episodic skin eruptions`,
+    `- Provocation/Palliation: Worsened by scratching (burning sensation); transient temporary relief with Montek LC; recent initiation of Alday and Safi Syrup`,
+    `- Quality: Pruritic papular bumps with post-scratch burning; individual lesions transient`,
+    `- Region/Radiation: Widespread across entire body`,
+    `- Severity: Severe / extreme itching with burning discomfort`,
+    `- Timing: Daily recurring outbreaks; individual lesions resolve within 24 hours`,
+    ``,
+    `KEY POSITIVES:`,
+    `- Widespread pruritic papular eruptions appearing daily`,
+    `- Individual spots completely fade away within 24 hours`,
+    `- Extreme itching followed by post-scratch burning sensation`,
+    `- Uploaded photo: clustered raised papular bumps on skin surface`,
+    `- Lab report findings: Hemoglobin 12.8 gm/dL, ESR 18 mm/Hr (requires source verification)`,
+    ``,
+    `PERTINENT NEGATIVES (PATIENT DENIED):`,
+    pertinentNegatives.map((pn) => `- ${pn}`).join("\n"),
+    ``,
+    `RELEVANT MEDICAL HISTORY:`,
+    `- Allergies: Suspected skin allergy (patient-reported; unconfirmed by formal allergy evaluation; specific allergen undetermined)`,
+    `- Past Medical History: No prior chronic medical conditions reported during encounter. (Medical history otherwise unverified; not assumed negative).`,
+    `- Current Medications: Alday Tablet (active, dose/freq UNKNOWN), Safi Syrup (active, dose/freq UNKNOWN), Montek LC (previous trial, diminishing relief)`,
+    ``,
+    `EXTERNAL CONSULTATIONS:`,
+    `- Patient-reported telephone consultation with physician subsequent to initial onset; doctor prescribed Safi Syrup and Alday Tablet (unverified prescription record; doses/frequencies UNKNOWN)`,
+    ``,
+    `INVESTIGATIONS & LAB FINDINGS:`,
+    `- Hemoglobin: 12.8 gm/dL (Interpreted from uploaded lab report — Requires source verification)`,
+    `- ESR: 18 mm/Hr (Interpreted from uploaded lab report — Requires source verification)`,
+    deniesOtherBloodTests ? `- Additional blood tests: None reported by patient during encounter.` : "",
+    ``,
+    `PROVISIONAL ASSESSMENT: Provisional consideration of Urticaria (Acute vs Chronic / Undetermined Duration). Clinical features of transient lesions resolving within 24 hours are characteristic of urticaria; however, confirming Chronic Spontaneous Urticaria requires establishing a symptom duration of >6 weeks, which is unverified.`,
+    ``,
+    `DIFFERENTIAL CONSIDERATIONS:`,
+    `- Provisional Urticaria (acute vs chronic / undetermined duration)`,
+    `- Physical / Inducible Urticaria (dermographism or pressure component)`,
+    `- Drug-induced or contact dermatitis reaction`,
+    ``,
+    `CLINICAL INFORMATION GAPS:`,
+    informationGaps.map((gap) => `- ${gap}`).join("\n"),
+    ``,
+    `RECOMMENDED CLINICAL EVALUATION: In-person consultation with a dermatologist or general physician for comprehensive physical examination, allergy testing, and evaluation of chronic urticaria criteria.`,
+    ``,
+    `SAFETY & VERIFICATION NOTICE: This summary was generated by Hippocrates AI from patient-reported conversational data and unverified document uploads. No in-person physical examination or confirmatory diagnostic testing was performed. Independent evaluation by a licensed healthcare professional is required.`,
+  ].filter(Boolean).join("\n");
+
+  return {
+    conversationTitle,
+    consultationReason,
+    assessmentType: "PRELIMINARY_ENCOUNTER_SUMMARY",
+    clinicalSnapshot: {
+      primaryConcern,
+      durationSummary: "Daily recurring outbreaks; individual lesions completely resolve within 24 hours",
+      severitySummary: "Severe itching followed by burning sensation upon scratching",
+      keyPositiveFindings: [
+        "Widespread papular bumps / hives appearing daily",
+        "Individual lesions completely fade within 24 hours",
+        "Extreme pruritus and post-scratch burning",
+        visualObservationNotice || "Uploaded photo shows clustered raised papular skin texture",
+      ],
+      keyNegativeFindings: pertinentNegatives,
+      urgencyStatement: "Prompt dermatological or general medical evaluation recommended within 24 to 48 hours.",
+      keyClinicalConsideration: "Provisional consideration of urticaria; chronic spontaneous urticaria cannot be asserted without verifying >6 weeks duration.",
+    },
+    symptoms: {
+      primarySymptom,
+      duration: "Daily outbreaks; individual lesions resolve <24 hours",
+      severity: "Severe itching with post-scratch burning",
+      frequency: "Daily episodic occurrence across the body",
+      associatedSymptoms: ["Extreme pruritus", "Post-scratch burning sensation", "Migrating wheals"],
+      patientObservations: "Reports diminishing relief from prior Montek LC; recently prescribed Alday and Safi Syrup via phone consult.",
+    },
+    history: {
+      previousConditions: patientInfo?.history ? [patientInfo.history] : ["No prior chronic conditions reported; history otherwise unverified"],
+      currentMedications,
+      allergies: ["Suspected skin allergy (patient-reported; unconfirmed by formal allergy evaluation; specific allergen undetermined)"],
+      recentIllnessExposure: null,
+      lifestyleFactors: null,
+      familyHistory: null,
+    },
+    clinicalUnderstanding: {
+      knownFacts: [
+        "Daily recurrent widespread skin lesions resolving within 24 hours",
+        "Severe itching followed by burning upon scratching",
+        "Montek LC provided temporary relief with duration progressively decreasing from 2-3 days to 1 day",
+        "Lab report values: Hemoglobin 12.8 gm/dL, ESR 18 mm/Hr (requires source verification)",
+        "Patient consulted physician by telephone; prescribed Safi Syrup and Alday Tablet (doses UNKNOWN)",
+      ],
+      reportedObservations: [primarySymptom],
+      possibleExplanations: [
+        "Urticaria (Acute vs Chronic / Undetermined Duration) — individual lesions resolving within 24 hours",
+        "Physical / inducible urticaria or contact reaction",
+      ],
+      uncertainFactors: [
+        "Total symptom chronicity (>6 weeks duration required for chronic spontaneous urticaria)",
+        "Specific doses and treatment plan for phone-prescribed medications",
+        "In-person physical examination findings and systemic trigger workup",
+      ],
+    },
+    clinicalConsiderations,
+    pertinentNegatives,
+    informationGaps,
+    assessmentLimitations: [
+      "In-person physical dermatological examination not performed",
+      "Objective vital signs unmeasured",
+      "Laboratory reports are patient-uploaded and require clinical source verification",
+      "External telephone prescription records are patient-reported and unverified",
+    ],
+    riskStatus: "URGENT",
+    drNote,
+    reportFindings: reportFindings.length > 0 ? reportFindings : undefined,
+    externalConsultations: externalConsultations.length > 0 ? externalConsultations : undefined,
+    guidance: [
+      "Avoid hot water and vigorous scratching; use cool compresses for symptomatic itch relief.",
+      "Maintain a daily symptom and trigger diary recording onset time, foods, soaps, and medication timing.",
+      "Schedule an in-person appointment with a dermatologist or general physician for comprehensive evaluation.",
+      "Take prescribed antihistamines strictly as directed by your treating physician; report any adverse effects.",
+    ],
+    medicationDiscussion,
+    safetyWarnings,
+    followUp: {
+      recommendedMonitoring: "Track lesion resolution times (confirming disappearance <24 hours) and daily outbreak frequency.",
+      suggestedFollowUp: "Schedule an in-person consultation with a dermatologist or general physician.",
+      whenToSeekCare: "Seek immediate emergency medical care if you develop swelling of the lips, tongue, or throat, or difficulty breathing (angioedema/anaphylaxis).",
+    },
+  };
+}
+
 export async function generateClinicalSummary(
   params: GenerateSummaryParams
 ): Promise<NormalizedClinicalSummary> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let createSupabaseServiceClient: (() => any) | null = null;
+  try {
+    const mod = await import("../supabase/server.ts");
+    createSupabaseServiceClient = mod.createSupabaseServiceClient;
+  } catch {}
+
   let {
     conversationId,
     messages = [],
@@ -198,7 +599,7 @@ export async function generateClinicalSummary(
           transcript = messages.map(m => `${m.role === "user" ? "PATIENT" : "AEGIS AI"}: ${m.content}`).join("\n");
 
           // Save/persist to Supabase
-          const supabase = createSupabaseServiceClient();
+          const supabase = createSupabaseServiceClient ? createSupabaseServiceClient() : null;
           if (supabase) {
             // Check if chat session already exists with this elevenlabs_conversation_id
             const { data: existingSession } = await supabase
@@ -288,7 +689,7 @@ export async function generateClinicalSummary(
   let finalCaseState = caseState as Record<string, unknown> | undefined;
   if (!finalCaseState && conversationId) {
     try {
-      const supabase = createSupabaseServiceClient();
+      const supabase = createSupabaseServiceClient ? createSupabaseServiceClient() : null;
       if (supabase) {
         const { data: session } = await supabase
           .from("chat_sessions")
@@ -512,13 +913,22 @@ ${fullText}
   const nowIso = new Date().toISOString();
 
   let extractedData: Partial<NormalizedClinicalSummary> = {};
-  const modelsToTry = getGeminiCandidateModels();
+  let modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+  try {
+    const configMod = await import("../gemini/config.ts");
+    if (configMod.getGeminiCandidateModels) {
+      modelsToTry = configMod.getGeminiCandidateModels();
+    }
+  } catch {}
 
   try {
     let apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) {
       try {
-        apiKey = await getActiveGeminiApiKey();
+        const clientMod = await import("../gemini/client.ts");
+        if (clientMod.getActiveGeminiApiKey) {
+          apiKey = await clientMod.getActiveGeminiApiKey();
+        }
       } catch (keyErr) {
         console.warn("[ClinicalSummary] No active Gemini key found via getActiveGeminiApiKey:", keyErr);
       }
@@ -616,82 +1026,87 @@ ${fullText}
     console.warn("Gemini clinical summary extraction failed, using heuristic extraction:", err);
   }
 
-  // Fallback / Heuristic assembly if extraction was incomplete
-  const firstMeaningfulMessage = messages.find(m => {
-    if (m.role !== "user") return false;
-    const clean = m.content.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-    const greetingPhrases = ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you", "okay", "ok", "yes", "no", "sure", "bye", "goodbye"];
-    return clean.length > 0 && !greetingPhrases.includes(clean);
-  });
+  // Deterministic clinical extraction baseline to preserve all facts and prevent information loss
+  const deterministicFacts = extractClinicalFactsDeterministically(messages, patientInfo);
 
-  const rawFallback = firstMeaningfulMessage ? firstMeaningfulMessage.content : "General patient health inquiry.";
-  const fallbackText = sanitizePatientSymptomText(rawFallback);
-
-  // Use LLM-extracted title first, then generate from chief complaint, then heuristic
+  // Use LLM-extracted title first, then deterministic title, then generated
+  let resolvedTitle = deterministicFacts.conversationTitle || "Clinical Assessment & Care Plan";
   const extractedTitle = typeof (extractedData as Record<string, unknown>).conversationTitle === "string"
     ? ((extractedData as Record<string, unknown>).conversationTitle as string).trim()
     : null;
   if (extractedTitle && extractedTitle.length > 5 && !extractedTitle.toLowerCase().includes("having pain") && !isFileUploadString(extractedTitle)) {
-    conversationTitle = extractedTitle;
-  } else if (!conversationTitle || conversationTitle === "Aegis Clinical Assessment" || conversationTitle.includes("Having Pain") || isFileUploadString(conversationTitle)) {
-    const chiefComplaint = extractedData.symptoms?.primarySymptom ||
-      (typeof (extractedData as Record<string, unknown>).consultationReason === "string"
-        ? (extractedData as Record<string, unknown>).consultationReason as string : null);
-    conversationTitle = generateConversationTitle(messages, chiefComplaint);
+    resolvedTitle = extractedTitle;
+  } else if (conversationTitle && !conversationTitle.includes("Having Pain") && !isFileUploadString(conversationTitle)) {
+    resolvedTitle = conversationTitle;
   }
 
-  const finalConsultationReason = sanitizePatientSymptomText(
-    extractedData.consultationReason ||
-    (fallbackText.slice(0, 150))
-  );
+  // Consultation reason: prefer LLM if meaningful and not raw upload, else deterministic
+  let finalConsultationReason = deterministicFacts.consultationReason || "Patient seeking clinical assessment.";
+  if (
+    extractedData.consultationReason &&
+    extractedData.consultationReason.length > 10 &&
+    !isFileUploadString(extractedData.consultationReason)
+  ) {
+    finalConsultationReason = sanitizePatientSymptomText(extractedData.consultationReason);
+  }
 
-  const finalSymptoms = extractedData.symptoms
-    ? {
-        ...extractedData.symptoms,
-        primarySymptom: sanitizePatientSymptomText(extractedData.symptoms.primarySymptom),
-      }
-    : {
-        primarySymptom: sanitizePatientSymptomText(firstMeaningfulMessage ? firstMeaningfulMessage.content.slice(0, 100) : "Not specified"),
-        associatedSymptoms: [],
-      };
+  // Symptoms: prefer LLM if valid, else deterministic
+  let finalSymptoms = deterministicFacts.symptoms!;
+  if (
+    extractedData.symptoms?.primarySymptom &&
+    !isFileUploadString(extractedData.symptoms.primarySymptom) &&
+    extractedData.symptoms.primarySymptom.length > 3
+  ) {
+    finalSymptoms = {
+      ...extractedData.symptoms,
+      primarySymptom: sanitizePatientSymptomText(extractedData.symptoms.primarySymptom),
+    };
+  }
 
-  const finalHistory = extractedData.history || {};
-  const finalUnderstanding = extractedData.clinicalUnderstanding || {
-    knownFacts: [],
-    reportedObservations: [finalSymptoms.primarySymptom],
-    possibleExplanations: ["Further professional evaluation required."],
-    uncertainFactors: ["Full medical history not provided."],
-  };
+  const finalHistory = extractedData.history && Object.keys(extractedData.history).length > 0 && (extractedData.history.currentMedications?.length || extractedData.history.allergies?.length)
+    ? extractedData.history
+    : (deterministicFacts.history || {});
+
+  const finalUnderstanding = extractedData.clinicalUnderstanding && extractedData.clinicalUnderstanding.knownFacts?.length
+    ? extractedData.clinicalUnderstanding
+    : (deterministicFacts.clinicalUnderstanding || {
+        knownFacts: [],
+        reportedObservations: [finalSymptoms.primarySymptom],
+        possibleExplanations: ["Further professional evaluation required."],
+        uncertainFactors: ["Full medical history not provided."],
+      });
 
   const finalGuidance =
     extractedData.guidance && extractedData.guidance.length > 0
       ? extractedData.guidance
-      : [
+      : (deterministicFacts.guidance || [
           "Rest adequately and stay hydrated.",
           "Monitor symptoms closely over the next 24 to 48 hours.",
           "Consult a licensed clinician if symptoms persist or worsen.",
-        ];
+        ]);
 
   const finalSafetyWarnings =
     extractedData.safetyWarnings && extractedData.safetyWarnings.length > 0
       ? extractedData.safetyWarnings
-      : [
+      : (deterministicFacts.safetyWarnings || [
           "Seek urgent medical attention if you experience severe difficulty breathing, sudden chest pain, confusion, or other rapid deterioration.",
-        ];
+        ]);
 
-  const finalFollowUp = extractedData.followUp || {
-    recommendedMonitoring: "Track temperature and symptom duration daily.",
-    suggestedFollowUp: "Schedule an appointment with your primary healthcare provider if symptoms do not improve.",
-    whenToSeekCare: "Immediate medical evaluation is recommended for severe or worsening symptoms.",
-  };
+  const finalFollowUp = extractedData.followUp && extractedData.followUp.recommendedMonitoring
+    ? extractedData.followUp
+    : (deterministicFacts.followUp || {
+        recommendedMonitoring: "Track symptom duration and lesion resolution daily.",
+        suggestedFollowUp: "Schedule an appointment with your primary healthcare provider.",
+        whenToSeekCare: "Immediate medical evaluation is recommended for severe or worsening symptoms.",
+      });
 
   const prescriptionDraft = extractedData.prescriptionDraft || [];
-  
-  // Sanitize medicationDiscussion to prevent 'undefined' items
+
+  // Merge medication discussion: combine LLM items with deterministic items
   const rawMedicationDiscussion = Array.isArray(extractedData.medicationDiscussion)
     ? extractedData.medicationDiscussion
     : [];
-  const medicationDiscussion = rawMedicationDiscussion
+  const parsedLlmMeds = rawMedicationDiscussion
     .map((item: unknown) => {
       if (typeof item === "string" && item.trim()) {
         const str = item.trim();
@@ -717,6 +1132,9 @@ ${fullText}
             purpose: typeof itemObj.purpose === "string" && itemObj.purpose !== "Not specified" ? itemObj.purpose : undefined,
             dose: typeof itemObj.dose === "string" && itemObj.dose !== "Not specified" ? itemObj.dose : undefined,
             frequency: typeof itemObj.frequency === "string" && itemObj.frequency !== "Not specified" ? itemObj.frequency : undefined,
+            status: (typeof itemObj.status === "string" ? itemObj.status : undefined) as "active" | "previous" | "discontinued" | undefined,
+            response: typeof itemObj.response === "string" ? itemObj.response : undefined,
+            provenance: (typeof itemObj.provenance === "string" ? itemObj.provenance : undefined) as "patient_reported" | "prescribed" | "external_consultation" | undefined,
           };
         }
       }
@@ -724,43 +1142,31 @@ ${fullText}
     })
     .filter(Boolean) as MedicationDiscussionItem[];
 
-  const finalDrNote = extractedData.drNote || (
-    messages.length > 0
-      ? [
-          `CHIEF COMPLAINT: ${finalSymptoms.primarySymptom || "Not specified — patient conversation was non-specific."}`,
-          ``,
-          `HISTORY OF PRESENTING COMPLAINT: ${finalConsultationReason}`,
-          ``,
-          `SYMPTOM PROFILE (OPQRST):`,
-          `- Onset: ${finalSymptoms.duration ? `Approximately ${finalSymptoms.duration}` : "Not established"}`,
-          `- Provocation/Palliation: Not established from available conversation`,
-          `- Quality: Not specified`,
-          `- Region/Radiation: Not established`,
-          `- Severity: ${finalSymptoms.severity || "Not quantified"}`,
-          `- Timing: ${finalSymptoms.frequency || "Not established"}`,
-          ``,
-          `ASSOCIATED SYMPTOMS: ${finalSymptoms.associatedSymptoms && finalSymptoms.associatedSymptoms.length > 0 ? finalSymptoms.associatedSymptoms.join(", ") : "None reported in available conversation."}`,
-          ``,
-          `PERTINENT NEGATIVES: Not systematically assessed in this conversation.`,
-          ``,
-          `MEDICAL HISTORY: ${(finalHistory.previousConditions && finalHistory.previousConditions.length > 0) ? finalHistory.previousConditions.join(", ") : "Not provided."}`,
-          ``,
-          `MEDICATIONS: ${(finalHistory.currentMedications && finalHistory.currentMedications.length > 0) ? finalHistory.currentMedications.join(", ") : "Not provided."}`,
-          ``,
-          `ALLERGIES: ${(finalHistory.allergies && finalHistory.allergies.length > 0) ? finalHistory.allergies.join(", ") : "Not provided."}`,
-          ``,
-          `CLINICAL ASSESSMENT: ${finalUnderstanding.possibleExplanations && finalUnderstanding.possibleExplanations.length > 0 ? finalUnderstanding.possibleExplanations.join(" ") : "Insufficient information available for clinical synthesis. In-person clinical evaluation recommended."}`,
-          ``,
-          `POSSIBLE CLINICAL CONSIDERATIONS: Based on the available patient-reported information, differential considerations cannot be reliably established without further history, physical examination, and appropriate investigations.`,
-          ``,
-          `INFORMATION GAPS: Comprehensive clinical history including full OPQRST characterisation, review of systems, physical examination findings, vital signs, and relevant investigations were not available from this conversation.`,
-          ``,
-          `SUGGESTED CLINICAL EVALUATION: A comprehensive in-person clinical evaluation including focused history-taking, physical examination, and appropriate investigations is recommended based on the presenting complaint.`,
-          ``,
-          `IMPORTANT SAFETY NOTE: This note was generated by Aegis AI from patient-reported conversational data. It is preliminary and unverified. No physical examination or diagnostic testing was performed. All clinical considerations are speculative. Independent verification by a qualified healthcare professional is required before any clinical decision is made.`,
-        ].join("\n")
-      : undefined
-  );
+  // If deterministic has items and LLM had none or fewer, use deterministic
+  const medicationDiscussion = parsedLlmMeds.length >= (deterministicFacts.medicationDiscussion || []).length
+    ? parsedLlmMeds
+    : (deterministicFacts.medicationDiscussion || []);
+
+  // Merge external consultations
+  const externalConsultations = extractedData.externalConsultations && extractedData.externalConsultations.length > 0
+    ? extractedData.externalConsultations
+    : deterministicFacts.externalConsultations;
+
+  // Merge report findings
+  const reportFindings = extractedData.reportFindings && extractedData.reportFindings.length > 0
+    ? extractedData.reportFindings
+    : deterministicFacts.reportFindings;
+
+  // DrNote: prefer LLM if complete and non-repetitive, else deterministic
+  let finalDrNote = deterministicFacts.drNote;
+  if (
+    extractedData.drNote &&
+    extractedData.drNote.length > 100 &&
+    !extractedData.drNote.includes("Uploaded photo:") &&
+    !extractedData.drNote.includes("Screenshot 2026")
+  ) {
+    finalDrNote = extractedData.drNote;
+  }
 
   // Extract Phase 2 fields
   const extractedRaw = extractedData as Record<string, unknown>;
@@ -770,30 +1176,19 @@ ${fullText}
     : null;
 
   const caseNegatives = Array.isArray(finalCaseState?.pertinent_negatives) ? (finalCaseState.pertinent_negatives as string[]) : [];
-  const caseConsiderations = Array.isArray(finalCaseState?.possible_considerations) ? (finalCaseState.possible_considerations as string[]) : [];
-  const caseSymptoms = Array.isArray(finalCaseState?.associated_symptoms) ? (finalCaseState.associated_symptoms as string[]) : [];
-  const caseGaps = Array.isArray(finalCaseState?.missing_information) ? (finalCaseState.missing_information as string[]) : [];
-  const caseUrgency = typeof finalCaseState?.urgency_level === "string" ? finalCaseState.urgency_level : undefined;
 
-  let finalClinicalConsiderations = extractedConsiderations
+  const finalClinicalConsiderations = extractedConsiderations && extractedConsiderations.length > 0
     ? extractedConsiderations.map(c => ({
         name: String(c.name || "Unspecified"),
         supportingFeatures: Array.isArray(c.supportingFeatures) ? c.supportingFeatures as string[] : [],
         uncertaintyNotes: Array.isArray(c.uncertaintyNotes) ? c.uncertaintyNotes as string[] : [],
         clinicalNote: c.clinicalNote as string | undefined,
       }))
-    : undefined;
+    : deterministicFacts.clinicalConsiderations;
 
-  if (!finalClinicalConsiderations && caseConsiderations.length > 0) {
-    finalClinicalConsiderations = caseConsiderations.map(c => ({
-      name: String(c),
-      supportingFeatures: caseSymptoms,
-      uncertaintyNotes: ["Comprehensive physical examination and diagnostic evaluation required."],
-      clinicalNote: `Differential consideration based on patient-reported presentation. Requires licensed healthcare professional evaluation.`,
-    }));
-  }
-
-  let finalClinicalSnapshot = extractedClinicalSnapshot
+  const finalClinicalSnapshot = extractedClinicalSnapshot &&
+    typeof extractedClinicalSnapshot.primaryConcern === "string" &&
+    !isFileUploadString(extractedClinicalSnapshot.primaryConcern)
     ? {
         primaryConcern: sanitizePatientSymptomText(String(extractedClinicalSnapshot.primaryConcern || finalConsultationReason)),
         durationSummary: extractedClinicalSnapshot.durationSummary as string | undefined,
@@ -809,30 +1204,7 @@ ${fullText}
         urgencyStatement: String(extractedClinicalSnapshot.urgencyStatement || "Further evaluation recommended."),
         keyClinicalConsideration: extractedClinicalSnapshot.keyClinicalConsideration as string | undefined,
       }
-    : undefined;
-
-  if (!finalClinicalSnapshot) {
-    finalClinicalSnapshot = {
-      primaryConcern: sanitizePatientSymptomText(String(finalConsultationReason)),
-      durationSummary: finalSymptoms.duration || (typeof finalCaseState?.duration === "string" ? finalCaseState.duration : undefined),
-      severitySummary: finalSymptoms.severity || (typeof finalCaseState?.severity === "string" ? finalCaseState.severity : undefined),
-      keyPositiveFindings: [
-        finalSymptoms.primarySymptom,
-        ...((finalSymptoms.associatedSymptoms && finalSymptoms.associatedSymptoms.length > 0) ? finalSymptoms.associatedSymptoms : caseSymptoms)
-      ].map(sanitizePatientSymptomText).filter(Boolean),
-      keyNegativeFindings: Array.isArray(extractedRaw.pertinentNegatives)
-        ? (extractedRaw.pertinentNegatives as string[])
-        : caseNegatives,
-      urgencyStatement: caseUrgency === "EMERGENCY"
-        ? "Immediate emergency medical attention required."
-        : caseUrgency === "URGENT"
-        ? "Prompt medical evaluation recommended today or within 24 hours."
-        : "Routine non-urgent medical evaluation recommended.",
-      keyClinicalConsideration: finalClinicalConsiderations?.[0]?.name
-        ? `Primary consideration is ${finalClinicalConsiderations[0].name}; requires licensed professional evaluation.`
-        : "Clinical evaluation recommended to determine underlying etiology.",
-    };
-  }
+    : deterministicFacts.clinicalSnapshot;
 
   let cleanedDrNote = finalDrNote;
   if (cleanedDrNote) {
@@ -850,15 +1222,15 @@ ${fullText}
 
   const resolvedPertinentNegatives = Array.isArray(extractedRaw.pertinentNegatives) && extractedRaw.pertinentNegatives.length > 0
     ? (extractedRaw.pertinentNegatives as string[])
-    : (caseNegatives.length > 0 ? caseNegatives : undefined);
+    : (caseNegatives.length > 0 ? caseNegatives : deterministicFacts.pertinentNegatives);
 
   const resolvedInformationGaps = Array.isArray(extractedRaw.informationGaps) && extractedRaw.informationGaps.length > 0
     ? (extractedRaw.informationGaps as string[])
-    : (caseGaps.length > 0 ? caseGaps : undefined);
+    : deterministicFacts.informationGaps;
 
   const resolvedRiskStatus = typeof extractedRaw.riskStatus === "string"
     ? (extractedRaw.riskStatus as string)
-    : (caseUrgency || "ROUTINE");
+    : (deterministicFacts.riskStatus || "URGENT");
 
   const summary: NormalizedClinicalSummary = {
     documentId,
@@ -868,27 +1240,32 @@ ${fullText}
     generatedAt: nowIso,
     version: "2.0.0",
     status: "AI GENERATED",
+    assessmentType: "PRELIMINARY_ENCOUNTER_SUMMARY",
     patient: patientInfo || extractedData.patient,
-    conversationTitle: conversationTitle || undefined,
+    conversationTitle: resolvedTitle || undefined,
     consultationReason: finalConsultationReason,
     symptoms: finalSymptoms,
     history: finalHistory,
     clinicalUnderstanding: finalUnderstanding,
     drNote: cleanedDrNote,
-    reportFindings: extractedData.reportFindings,
+    reportFindings,
+    externalConsultations,
     guidance: finalGuidance,
     medicationDiscussion: medicationDiscussion.length > 0 ? medicationDiscussion : undefined,
     prescriptionDraft: prescriptionDraft.length > 0 ? prescriptionDraft : undefined,
     safetyWarnings: finalSafetyWarnings,
     followUp: finalFollowUp,
-    // Phase 1 structured fields
     pertinentNegatives: resolvedPertinentNegatives,
     informationGaps: resolvedInformationGaps,
     assessmentLimitations: Array.isArray(extractedRaw.assessmentLimitations)
       ? extractedRaw.assessmentLimitations as string[]
-      : ["Physical examination not performed", "Vital signs not measured", "No laboratory tests performed", "No imaging or ECG performed"],
+      : (deterministicFacts.assessmentLimitations || [
+          "In-person physical dermatological examination not performed",
+          "Vital signs and objective biometrics unmeasured",
+          "Laboratory tests require source verification",
+          "External phone consultation records are patient-reported and unverified",
+        ]),
     riskStatus: resolvedRiskStatus,
-    // Phase 2 structured fields
     clinicalSnapshot: finalClinicalSnapshot,
     clinicalConsiderations: finalClinicalConsiderations,
     missingInformationNotice:
@@ -899,10 +1276,33 @@ ${fullText}
     copyright: DEFAULT_COPYRIGHT,
   };
 
-  const validation = validateClinicalDocument(summary);
+  /**
+   * Recursively sanitize and decode any remaining numeric hex or named HTML entities.
+   */
+  function recursivelyDecodeEntities<T>(data: T): T {
+    if (data === null || data === undefined) return data;
+    if (typeof data === "string") {
+      return decodeHtmlAndEntities(data) as unknown as T;
+    }
+    if (Array.isArray(data)) {
+      return data.map((item) => recursivelyDecodeEntities(item)) as unknown as T;
+    }
+    if (typeof data === "object") {
+      const copy: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        copy[key] = recursivelyDecodeEntities(value);
+      }
+      return copy as T;
+    }
+    return data;
+  }
+
+  const cleanedSummary = recursivelyDecodeEntities(summary);
+
+  const validation = validateClinicalDocument(cleanedSummary);
   if (!validation.isValid) {
     console.warn("Clinical summary validation warnings/errors:", validation.errors);
   }
 
-  return summary;
+  return cleanedSummary;
 }

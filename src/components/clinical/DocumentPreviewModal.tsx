@@ -55,9 +55,15 @@ export function DocumentPreviewModal({
                 <h2 className="text-sm font-bold text-slate-900 tracking-tight">
                   Clinical Assessment & Care Plan
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 text-[10px] font-bold uppercase tracking-wider border border-teal-200">
-                  {summary.status || "AI Generated"}
-                </span>
+                {summary.assessmentType === "PRELIMINARY_ENCOUNTER_SUMMARY" ? (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-bold uppercase tracking-wider border border-amber-300">
+                    Preliminary Summary (Unverified)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 text-[10px] font-bold uppercase tracking-wider border border-teal-200">
+                    {summary.status || "AI Generated"}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 font-medium">
                 Document ID:{" "}
@@ -523,6 +529,82 @@ export function DocumentPreviewModal({
             </div>
           </section>
 
+          {/* Findings from Uploaded Reports */}
+          {summary.reportFindings && summary.reportFindings.length > 0 && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-3.5 bg-teal-600 rounded-full" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                    Findings From Uploaded Reports
+                  </h3>
+                </div>
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  Source Verification Needed
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm text-xs space-y-2">
+                {summary.reportFindings.map((f, idx) => (
+                  <div key={idx} className="flex items-start gap-2 text-slate-800">
+                    <span className="text-teal-600 font-bold">•</span>
+                    <div>
+                      <span className="font-bold text-slate-900">{f.testName}:</span>{" "}
+                      <span className="font-semibold text-slate-800">{f.resultValue}</span>
+                      {f.referenceRange && (
+                        <span className="text-slate-500 ml-1">(Ref: {f.referenceRange})</span>
+                      )}
+                      {f.interpretation && (
+                        <span className="text-slate-700 ml-1.5">— {f.interpretation}</span>
+                      )}
+                      {f.verificationStatus === "requires_source_verification" && (
+                        <span className="ml-2 text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                          Requires Source Verification
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* External Consultations & Recommendations */}
+          {summary.externalConsultations && summary.externalConsultations.length > 0 && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-3.5 bg-slate-800 rounded-full" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                    External Consultations & Clinician Recommendations
+                  </h3>
+                </div>
+                <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                  Patient-Reported
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-sm text-xs space-y-3">
+                {summary.externalConsultations.map((ec, idx) => (
+                  <div key={idx} className="space-y-1.5 border-b border-slate-100 last:border-b-0 pb-2 last:pb-0">
+                    <p className="font-bold text-slate-900">
+                      {ec.consultationType} Consultation — {ec.provider}
+                    </p>
+                    <p className="text-slate-700 leading-relaxed">{ec.summary}</p>
+                    {ec.prescribedMedications && ec.prescribedMedications.length > 0 && (
+                      <div className="pl-3 border-l-2 border-slate-200 space-y-1 pt-1">
+                        <p className="font-semibold text-slate-600 text-[11px]">Reported Prescriptions:</p>
+                        {ec.prescribedMedications.map((pm, pidx) => (
+                          <p key={pidx} className="text-slate-700">
+                            • <strong className="text-slate-800">{pm.medication}</strong> | Dose: {pm.dose || "UNKNOWN"} | Freq: {pm.frequency || "UNKNOWN"} ({pm.status || "active"})
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Structured Clinical Considerations (Differential Diagnosis) */}
           {summary.clinicalConsiderations && summary.clinicalConsiderations.length > 0 && (
             <section className="space-y-3">
@@ -789,9 +871,24 @@ export function DocumentPreviewModal({
                         <span className="text-teal-600 font-bold">•</span>
                         <span>
                           <strong className="text-slate-900">{med.medication}</strong>
+                          {med.status && (
+                            <span className="ml-1.5 px-1.5 py-0.2 rounded text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                              {med.status}
+                            </span>
+                          )}
                           {med.purpose && med.purpose !== "Not specified" && ` — Purpose: ${med.purpose}`}
                           {med.dose && med.dose !== "Not specified" && ` | Dose: ${med.dose}`}
                           {med.frequency && med.frequency !== "Not specified" && ` | Freq: ${med.frequency}`}
+                          {med.response && (
+                            <span className="block text-slate-600 italic mt-0.5">
+                              Response: {med.response}
+                            </span>
+                          )}
+                          {med.provenance && (
+                            <span className="text-[10px] text-slate-400 block">
+                              Source: {med.provenance}
+                            </span>
+                          )}
                         </span>
                       </div>
                     ))}

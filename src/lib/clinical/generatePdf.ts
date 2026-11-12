@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
-import type { NormalizedClinicalSummary } from "./types";
-import { parseDrNote } from "./parseDrNote";
+import type { NormalizedClinicalSummary } from "./types.ts";
+import { parseDrNote } from "./parseDrNote.ts";
+import { decodeHtmlAndEntities } from "./generateClinicalSummary.ts";
 import fs from "fs";
 import path from "path";
 
@@ -47,7 +48,7 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
 
   // --- HELPERS ---
   const checkPageOverflow = (neededHeight: number) => {
-    if (y + neededHeight > pageHeight - 18) {
+    if (y + neededHeight > pageHeight - 24) {
       doc.addPage();
       y = margin + 14; // leave room for running header on continuation pages
     }
@@ -81,10 +82,10 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
         doc.line(margin, 12, pageWidth - margin, 12);
       }
 
-      // Running Footer (every page)
+      // Running Footer (every page) - clear 10mm buffer from pageHeight - 24
       doc.setDrawColor(...C_SLATE_200);
       doc.setLineWidth(0.3);
-      doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+      doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.8);
@@ -92,10 +93,10 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
       doc.text(
         "Hippocrates AI  •  Confidential AI-Generated Clinical Assessment",
         margin,
-        pageHeight - 8
+        pageHeight - 9.5
       );
       doc.setFont("helvetica", "bold");
-      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 8, {
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - margin, pageHeight - 9.5, {
         align: "right",
       });
     }
@@ -106,7 +107,10 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
     accentColor: readonly [number, number, number] = C_TEAL_600,
     badgeText?: string
   ) => {
-    checkPageOverflow(14);
+    checkPageOverflow(26); // Ensure header + minimum 2 lines never create an orphan heading
+    const cleanTitle = decodeHtmlAndEntities(title);
+    const cleanBadge = badgeText ? decodeHtmlAndEntities(badgeText) : undefined;
+
     // Sleek slim accent pill
     doc.setFillColor(...accentColor);
     doc.roundedRect(margin, y, 1.4, 4.2, 0.7, 0.7, "F");
@@ -114,13 +118,13 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
     doc.setFontSize(8.8);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...C_SLATE_900);
-    doc.text(title.toUpperCase(), margin + 4.5, y + 3.4);
+    doc.text(cleanTitle.toUpperCase(), margin + 4.5, y + 3.4);
 
-    const titleWidth = doc.getTextWidth(title.toUpperCase());
+    const titleWidth = doc.getTextWidth(cleanTitle.toUpperCase());
     const ruleStartX = margin + 4.5 + titleWidth + 3;
 
-    if (badgeText) {
-      const badgeW = doc.getTextWidth(badgeText) + 5;
+    if (cleanBadge) {
+      const badgeW = doc.getTextWidth(cleanBadge) + 5;
       const badgeX = pageWidth - margin - badgeW;
       doc.setFillColor(...C_SLATE_100);
       doc.setDrawColor(...C_SLATE_200);
@@ -129,7 +133,7 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
       doc.setFontSize(6.2);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...C_SLATE_600);
-      doc.text(badgeText, badgeX + 2.5, y + 2.8);
+      doc.text(cleanBadge, badgeX + 2.5, y + 2.8);
 
       if (badgeX > ruleStartX + 5) {
         doc.setDrawColor(...C_SLATE_200);
@@ -146,10 +150,12 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
   };
 
   const drawParagraph = (text: string, indent = 0) => {
+    if (!text) return;
+    const cleanText = decodeHtmlAndEntities(text);
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...C_SLATE_700);
-    const lines = doc.splitTextToSize(text, contentWidth - indent);
+    const lines = doc.splitTextToSize(cleanText, contentWidth - indent);
     checkPageOverflow(lines.length * 3.8 + 2);
     doc.text(lines, margin + indent, y);
     y += lines.length * 3.8 + 2;
@@ -161,7 +167,8 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
     markerColor: readonly [number, number, number] = C_TEAL_600
   ) => {
     if (!items || items.length === 0) return;
-    for (const item of items) {
+    for (const rawItem of items) {
+      const item = decodeHtmlAndEntities(rawItem);
       doc.setFontSize(8);
       const lines = doc.splitTextToSize(item, contentWidth - 6);
       checkPageOverflow(lines.length * 3.8 + 1);
@@ -209,17 +216,25 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
   doc.text("AI CLINICAL INTELLIGENCE PLATFORM", brandX + 44, y + 5);
 
   // Status Badge on Right
-  const badgeW = 48;
+  const isPreliminary = summary.assessmentType === "PRELIMINARY_ENCOUNTER_SUMMARY";
+  const badgeW = isPreliminary ? 64 : 48;
   const badgeX = pageWidth - margin - badgeW;
-  doc.setFillColor(...C_SLATE_100);
-  doc.setDrawColor(...C_SLATE_200);
+  const badgeFill = isPreliminary ? ([254, 243, 199] as const) : C_SLATE_100;
+  const badgeBorder = isPreliminary ? ([245, 158, 11] as const) : C_SLATE_200;
+  const badgeTextColor = isPreliminary ? ([146, 64, 14] as const) : C_SLATE_600;
+
+  doc.setFillColor(badgeFill[0], badgeFill[1], badgeFill[2]);
+  doc.setDrawColor(badgeBorder[0], badgeBorder[1], badgeBorder[2]);
   doc.setLineWidth(0.3);
   doc.roundedRect(badgeX, y - 0.5, badgeW, 8.5, 1.5, 1.5, "FD");
 
-  doc.setFontSize(6.5);
+  doc.setFontSize(6.2);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(...C_SLATE_600);
-  doc.text("STATUS: " + (summary.status || "AI GENERATED"), badgeX + badgeW / 2, y + 5, {
+  doc.setTextColor(badgeTextColor[0], badgeTextColor[1], badgeTextColor[2]);
+  const statusLabel = isPreliminary
+    ? "PRELIMINARY SUMMARY (UNVERIFIED)"
+    : "STATUS: " + (summary.status || "AI GENERATED");
+  doc.text(statusLabel, badgeX + badgeW / 2, y + 5, {
     align: "center",
   });
 
@@ -229,8 +244,9 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...C_SLATE_800);
-  const docTitle =
-    summary.conversationTitle || "Clinical Conversation Assessment & Care Plan";
+  const docTitle = decodeHtmlAndEntities(
+    summary.conversationTitle || "Clinical Conversation Assessment & Care Plan"
+  );
   doc.text(docTitle, margin, y);
   y += 4;
 
@@ -835,13 +851,32 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
   // --- 9. FINDINGS FROM UPLOADED REPORTS ---
   // =========================================================================
   if (summary.reportFindings && summary.reportFindings.length > 0) {
-    drawSectionHeader("Findings From Uploaded Reports", C_TEAL_600);
+    drawSectionHeader("Findings From Uploaded Reports", C_TEAL_600, "SOURCE VERIFICATION NEEDED");
     for (const f of summary.reportFindings) {
+      const verNotice = f.verificationStatus === "requires_source_verification" ? " [Requires Source Verification]" : "";
+      const sourceNotice = f.source ? ` (Source: ${f.source})` : "";
       drawParagraph(
-        `• ${f.testName}: ${f.resultValue} ${
-          f.referenceRange ? `(Ref: ${f.referenceRange})` : ""
-        } — ${f.interpretation || "AI-assisted interpretation"}`
+        `• ${f.testName}: ${f.resultValue}${
+          f.referenceRange ? ` (Ref: ${f.referenceRange})` : ""
+        } — ${f.interpretation || "AI-assisted interpretation"}${sourceNotice}${verNotice}`
       );
+    }
+  }
+
+  // =========================================================================
+  // --- 9B. EXTERNAL CONSULTATIONS & RECOMMENDATIONS ---
+  // =========================================================================
+  if (summary.externalConsultations && summary.externalConsultations.length > 0) {
+    drawSectionHeader("External Consultations & Clinician Recommendations", C_SLATE_800, "PATIENT-REPORTED");
+    for (const ec of summary.externalConsultations) {
+      drawParagraph(`• ${ec.consultationType} Consultation — ${ec.provider}:`);
+      drawParagraph(`  ${ec.summary}`, 4);
+      if (ec.prescribedMedications && ec.prescribedMedications.length > 0) {
+        const medLines = ec.prescribedMedications.map(
+          (m) => `Prescribed: ${m.medication} | Dose: ${m.dose || "UNKNOWN"} | Freq: ${m.frequency || "UNKNOWN"} (${m.status || "active"})`
+        );
+        drawBulletList(medLines, "–", C_SLATE_600);
+      }
     }
   }
 
@@ -1075,10 +1110,12 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
     checkPageOverflow(15 + validMeds.length * 8);
     drawSectionHeader("Medication Discussion");
     for (const med of validMeds) {
-      const parts = [`• ${med.medication}`];
+      const parts = [`• ${med.medication}${med.status ? ` (${med.status.toUpperCase()})` : ""}`];
       if (med.purpose && med.purpose !== "Not specified") parts.push(`Purpose: ${med.purpose}`);
       if (med.dose && med.dose !== "Not specified") parts.push(`Dose: ${med.dose}`);
       if (med.frequency && med.frequency !== "Not specified") parts.push(`Freq: ${med.frequency}`);
+      if (med.response) parts.push(`Response: ${med.response}`);
+      if (med.provenance) parts.push(`Source: ${med.provenance}`);
       drawParagraph(parts.join("  |  "));
     }
   }

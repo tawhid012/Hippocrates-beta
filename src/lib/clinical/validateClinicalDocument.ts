@@ -1,4 +1,4 @@
-import type { NormalizedClinicalSummary } from "./types";
+import type { NormalizedClinicalSummary } from "./types.ts";
 
 export interface ValidationResult {
   isValid: boolean;
@@ -87,6 +87,56 @@ export function validateClinicalDocument(summary: NormalizedClinicalSummary): Va
   // 7. Safety Warning Presence Check
   if (!summary.safetyWarnings || summary.safetyWarnings.length === 0) {
     warnings.push("No safety warnings or red flag indicators provided in this document.");
+  }
+
+  // 8. Clinical Safeguards: Unsupported Probabilities & False Precision
+  const fullContentStr = JSON.stringify(summary).toLowerCase();
+  if (
+    fullContentStr.includes("overwhelming probability") ||
+    fullContentStr.includes("definite probability") ||
+    /\b(?:9[0-9]|100)%\s*(?:probability|chance|certainty)\b/i.test(fullContentStr)
+  ) {
+    errors.push("Unsupported diagnostic probability estimate or false clinical precision detected.");
+  }
+
+  // 9. Clinical Safeguards: Chronic Urticaria Duration Requirement (>6 weeks)
+  const assertsChronicUrticaria =
+    fullContentStr.includes("chronic spontaneous urticaria") ||
+    fullContentStr.includes("chronic urticaria") ||
+    /\bcsu\b/i.test(fullContentStr);
+
+  if (assertsChronicUrticaria) {
+    const durationStr = (
+      (summary.symptoms?.duration || "") + " " +
+      (summary.clinicalSnapshot?.durationSummary || "")
+    ).toLowerCase();
+
+    const establishesChronicity =
+      durationStr.includes("week") &&
+      (/\b([6-9]|[1-9]\d+)\s*weeks?\b/i.test(durationStr) || durationStr.includes("month") || durationStr.includes("year"));
+
+    if (!establishesChronicity) {
+      warnings.push("Chronic spontaneous urticaria requires symptom duration >6 weeks. Presentation should be labeled as provisional urticaria pending duration confirmation.");
+    }
+  }
+
+  // 10. Document Quality: Entity Encoding Leaks
+  if (
+    fullContentStr.includes("&#xa0;") ||
+    fullContentStr.includes("&#x68;") ||
+    fullContentStr.includes("&#x43;") ||
+    /&#x[0-9a-f]{2,4};/i.test(fullContentStr)
+  ) {
+    warnings.push("Literal unparsed HTML/XML hex entity detected in clinical document text.");
+  }
+
+  // 11. Document Quality: Avoid Verbatim Copying of Raw Upload Strings
+  if (
+    summary.consultationReason?.includes("Uploaded photo:") ||
+    summary.symptoms?.primarySymptom?.includes("Uploaded photo:") ||
+    summary.clinicalSnapshot?.primaryConcern?.includes("Uploaded photo:")
+  ) {
+    errors.push("Raw upload filename string detected in clinical summary fields.");
   }
 
   return {

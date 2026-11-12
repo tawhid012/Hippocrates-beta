@@ -20,9 +20,9 @@ export interface RelevantHistory {
   previousConditions?: string[];
   currentMedications?: string[];
   allergies?: string[];
-  recentIllnessExposure?: string;
-  lifestyleFactors?: string;
-  familyHistory?: string;
+  recentIllnessExposure?: string | null;
+  lifestyleFactors?: string | null;
+  familyHistory?: string | null;
 }
 
 export interface ClinicalUnderstanding {
@@ -37,6 +37,8 @@ export interface ReportFinding {
   resultValue: string;
   referenceRange?: string;
   interpretation?: string;
+  source?: string;
+  verificationStatus?: "verified" | "requires_source_verification";
 }
 
 export interface MedicationDiscussionItem {
@@ -46,6 +48,26 @@ export interface MedicationDiscussionItem {
   frequency?: string;
   duration?: string;
   source?: string;
+  response?: string;
+  status?: "past_trial" | "current_patient_reported" | "external_consultation" | "active" | "previous" | "discontinued" | "unknown";
+  provenance?: string;
+}
+
+export interface ExternalConsultationItem {
+  consultationType: string;
+  provider?: string;
+  summary?: string;
+  clinicianNotes?: string;
+  reportedPrescriptions?: string[];
+  prescribedMedications?: Array<{
+    medication: string;
+    dose?: string;
+    frequency?: string;
+    status?: string;
+    provenance?: string;
+  }>;
+  timing?: string;
+  provenance: string;
 }
 
 export interface PrescriptionDraftItem {
@@ -123,6 +145,8 @@ export interface NormalizedClinicalSummary {
   // Phase 2 structured fields
   clinicalSnapshot?: ClinicalSnapshot;             // At-a-glance summary for professionals
   clinicalConsiderations?: ClinicalConsideration[]; // Structured differential with reasoning
+  externalConsultations?: ExternalConsultationItem[]; // Documented prior/subsequent external clinician consultations
+  assessmentType?: "FULL_CLINICAL_ASSESSMENT" | "PRELIMINARY_ENCOUNTER_SUMMARY";
 
   missingInformationNotice?: string;
   hasPrescriptionDraft: boolean;

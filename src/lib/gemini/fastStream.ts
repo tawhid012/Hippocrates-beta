@@ -119,7 +119,20 @@ export async function* streamGeminiWithFastFailover(
 
       // Stream the remaining tokens without artificial delays
       while (true) {
-        const nextResult = await iterator.next();
+        let nextResult: IteratorResult<{ text?: string }>;
+        try {
+          nextResult = await iterator.next();
+        } catch (streamErr: unknown) {
+          const streamErrMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+          // If the stream was interrupted by a dropped/unclosed SSE socket at the very end
+          // after tokens were already successfully generated, complete gracefully.
+          if (streamErrMsg.includes("Incomplete JSON segment at the end")) {
+            console.warn(`${logPrefix} Stream socket closed with trailing unparsed segment for ${model}; completing gracefully.`);
+            break;
+          }
+          throw streamErr;
+        }
+
         if (nextResult.done) break;
         yield nextResult.value;
       }
