@@ -10,6 +10,7 @@ import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/security/rateLimit";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function deriveCaseTitle(message: string) {
   const compact = message.replace(/\s+/g, " ").trim();

@@ -126,10 +126,18 @@ export async function POST(request: Request) {
       });
     }
 
-    // High-performance SSE Streaming mode
+    // High-performance SSE Streaming mode with active keep-alive heartbeat
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        const pingInterval = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(": ping\n\n"));
+          } catch {
+            clearInterval(pingInterval);
+          }
+        }, 3500);
+
         try {
           // Emit initial stage
           controller.enqueue(
@@ -214,6 +222,7 @@ export async function POST(request: Request) {
             encoder.encode(`event: error\ndata: ${JSON.stringify({ error: errMsg })}\n\n`)
           );
         } finally {
+          clearInterval(pingInterval);
           controller.close();
         }
       },

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { AI_TIMEOUT_MS } from "@/config/ai";
-import { getGeminiModelName } from "@/lib/gemini/config";
+import { getGeminiCandidateModels, getGeminiModelName } from "@/lib/gemini/config";
 import type { AIProvider, OracleMessage } from "./provider";
 
 export const geminiProvider: AIProvider = {
@@ -93,29 +93,57 @@ export const geminiProvider: AIProvider = {
 
   async testConnection(apiKey) {
     const ai = new GoogleGenAI({ apiKey });
-    const model = getGeminiModelName();
+    const candidateModels = getGeminiCandidateModels();
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("TIMEOUT")), 12_000)
-    );
+    let lastError: unknown = null;
 
-    try {
-      const pingPromise = ai.models.generateContent({
-        model,
-        contents: "Ping",
-      });
-      await Promise.race([pingPromise, timeoutPromise]);
-    } catch (error: unknown) {
-      const errMessage = error instanceof Error ? error.message : String(error);
-      if (
-        errMessage.includes("API_KEY_INVALID") ||
-        errMessage.includes("API key not valid") ||
-        (errMessage.includes("INVALID_ARGUMENT") && errMessage.includes("API key"))
-      ) {
-        throw new Error("INVALID_API_KEY");
+    for (const model of candidateModels) {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("TIMEOUT")), 12_000)
+      );
+
+      try {
+        const pingPromise = ai.models.generateContent({
+          model,
+          contents: "Ping",
+        });
+        await Promise.race([pingPromise, timeoutPromise]);
+        return; // Success!
+      } catch (error: unknown) {
+        lastError = error;
+        const errMessage = error instanceof Error ? error.message : String(error);
+        const lower = errMessage.toLowerCase();
+
+        if (
+          lower.includes("api_key_invalid") ||
+          lower.includes("api key not valid") ||
+          lower.includes("unauthenticated") ||
+          (lower.includes("invalid_argument") && lower.includes("api key"))
+        ) {
+          throw new Error("INVALID_API_KEY");
+        }
+
+        if (lower.includes("resource_exhausted") || lower.includes("quota")) {
+          throw new Error("QUOTA_EXCEEDED");
+        }
+
+        // If 404/503/model unavailable, continue to next candidate
+        if (
+          lower.includes("not found") ||
+          lower.includes("404") ||
+          lower.includes("503") ||
+          lower.includes("unavailable") ||
+          lower.includes("is not supported")
+        ) {
+          continue;
+        }
+
+        throw new Error(errMessage);
       }
-      throw new Error(errMessage);
     }
+
+    const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || "Connection failed.");
+    throw new Error(finalMsg);
   },
 };
 

@@ -369,7 +369,12 @@ export function AdminPanel() {
         ...prev,
         [providerId]: { ...prev[providerId], status: "connected" },
       }));
-      setSettingsMessage(`${providerId === "gemini" ? "Google Gemini" : "OpenAI"} connection verified successfully.`);
+      const testedNewKey = Boolean(apiKey);
+      setSettingsMessage(
+        testedNewKey
+          ? `${providerId === "gemini" ? "Google Gemini" : "OpenAI"} connection verified! Click "Save Key to Database" below to persist it.`
+          : `${providerId === "gemini" ? "Google Gemini" : "OpenAI"} connection verified successfully from database.`
+      );
     } catch (error) {
       setProviderStates((prev) => ({
         ...prev,

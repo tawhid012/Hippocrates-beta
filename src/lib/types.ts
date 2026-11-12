@@ -30,6 +30,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: Date;
+  status?: "sending" | "streaming" | "completed" | "error";
   isStreaming?: boolean;
   safetyEvaluation?: SafetyEvaluation;
   attachment?: ChatAttachment;

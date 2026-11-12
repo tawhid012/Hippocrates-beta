@@ -5,9 +5,9 @@ import { getGeminiCandidateModels } from "./config";
 // In-memory model circuit breaker with cooldown timestamps
 const modelCooldowns = new Map<string, number>();
 
-// TTFT guard: allow up to 10000ms for initial token before failover, preventing false failover during network latency
-const FIRST_TOKEN_TIMEOUT_MS = 10_000;
-const COOLDOWN_DURATION_MS = 30_000; // 30 seconds cooldown for transient spikes
+// TTFT guard: allow up to 15000ms for initial token before failover, accommodating multimodal image OCR & network variance
+const FIRST_TOKEN_TIMEOUT_MS = 15_000;
+const COOLDOWN_DURATION_MS = 60_000; // 60 seconds cooldown for transient spikes
 
 export function markModelCooldown(model: string, durationMs = COOLDOWN_DURATION_MS) {
   modelCooldowns.set(model, Date.now() + durationMs);
@@ -141,7 +141,8 @@ export async function* streamGeminiWithFastFailover(
       }
 
       // Mark model on cooldown so subsequent chat turns don't block
-      markModelCooldown(model);
+      const isDefunctModel = errMsg.includes("not found") || errMsg.includes("404") || errMsg.includes("no longer available");
+      markModelCooldown(model, isDefunctModel ? 24 * 60 * 60 * 1000 : COOLDOWN_DURATION_MS);
       console.warn(`${logPrefix} Model ${model} failed after ${Date.now() - t0}ms, set cooldown:`, errMsg);
     }
   }

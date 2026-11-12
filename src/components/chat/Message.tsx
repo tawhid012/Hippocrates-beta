@@ -58,10 +58,17 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
   const isUser = message.role === "user";
   const isPatient = persona === "patient";
   const isError =
+    message.status === "error" ||
     message.content === "Something went wrong while generating the response." ||
     message.content.startsWith("Unable to connect to the AI engine") ||
     message.content.startsWith("Network connection interrupted") ||
-    message.content.startsWith("Aegis is temporarily unable");
+    message.content.startsWith("Aegis is temporarily unable") ||
+    message.content.startsWith("Google Gemini daily request quota") ||
+    message.content.startsWith("AI servers are experiencing") ||
+    message.content.startsWith("Response took too long") ||
+    message.content.includes("could not complete the request") ||
+    message.content.includes("too large") ||
+    message.content.includes("timed out");
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);

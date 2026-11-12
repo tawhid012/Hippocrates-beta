@@ -21,6 +21,7 @@ import {
 import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function deriveCaseTitle(message: string, fileName?: string) {
   if (fileName) return `Report: ${fileName}`;

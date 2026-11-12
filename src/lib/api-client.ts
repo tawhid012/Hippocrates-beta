@@ -5,7 +5,7 @@
  * APIs directly and never receives provider names from chat responses.
  */
 
-import type { CaseSummary, CaseWithMessages, ChatRequest, ChatResponse } from "./types";
+import type { CaseSummary, CaseWithMessages, ChatAttachmentPayload, ChatRequest, ChatResponse } from "./types";
 import { createBrowserSupabaseClient } from "./supabase/client";
 
 export function getResolvedApiBaseUrl(): string {
@@ -30,12 +30,73 @@ interface ApiErrorBody {
   error?: string;
 }
 
-async function parseResponse<T>(response: Response): Promise<T> {
-  const body = (await response.json().catch(() => ({}))) as T & ApiErrorBody;
-  if (!response.ok) {
-    throw new Error(body.error || "Hippocrates could not complete the request.");
+async function extractErrorMessage(response: Response): Promise<string> {
+  try {
+    const cloned = response.clone();
+    const data = (await cloned.json().catch(() => null)) as ApiErrorBody | null;
+    if (data && typeof data === "object" && typeof data.error === "string" && data.error.trim()) {
+      return data.error.trim();
+    }
+  } catch {
+    // ignore json parse errors
   }
+
+  // Handle specific HTTP status codes with informative, actionable explanations
+  if (response.status === 413) {
+    return "The uploaded image or message payload is too large. Please select a smaller photo or take a new one.";
+  }
+  if (response.status === 504) {
+    return "The clinical AI engine took too long to complete the request (timeout). Please try asking again.";
+  }
+  if (response.status === 429) {
+    return "Too many requests or daily AI quota reached. Please wait a moment before sending another message.";
+  }
+  if (response.status === 401 || response.status === 403) {
+    return "Authentication required or session expired. Please refresh your browser.";
+  }
+
+  try {
+    const text = await response.text();
+    if (text && text.length < 200 && !text.includes("<html") && !text.includes("<!DOCTYPE")) {
+      return text.trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  return `Server returned an error (${response.status} ${response.statusText || "Error"}). Please try again.`;
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const errorMsg = await extractErrorMessage(response);
+    throw new Error(errorMsg);
+  }
+  const body = (await response.json().catch(() => ({}))) as T;
   return body;
+}
+
+function sanitizeAttachmentForWire(att?: ChatAttachmentPayload): Partial<ChatAttachmentPayload> | undefined {
+  if (!att) return undefined;
+  return {
+    fileName: att.fileName,
+    mimeType: att.mimeType,
+    fileSize: att.fileSize,
+    fileBase64: att.fileBase64,
+    attachmentType: att.attachmentType,
+    // Exclude redundant dataUrl to cut HTTP body payload in half
+  };
+}
+
+function sanitizeHistoryForWire(
+  history?: Array<{ role: string; content: string; attachment?: unknown; attachments?: unknown }>
+) {
+  if (!history || !Array.isArray(history)) return undefined;
+  return history.map((m) => ({
+    role: m.role,
+    content: m.content || "",
+    // Strictly strip base64 attachments from prior conversation turns
+  }));
 }
 
 function reviveChatResponse(response: ChatResponse): ChatResponse {
@@ -118,17 +179,17 @@ class HippocratesAPI {
         body: JSON.stringify({
           message: request.message,
           caseId: request.caseId,
-          attachment: request.attachment,
-          attachments: request.attachments,
+          attachment: sanitizeAttachmentForWire(request.attachment),
+          attachments: request.attachments?.map((a) => sanitizeAttachmentForWire(a)!),
           attachmentType: request.attachmentType,
-          history: request.history,
+          history: sanitizeHistoryForWire(request.history as Array<{ role: string; content: string }>),
           stream: true,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Hippocrates could not complete the request.");
+        const errorMsg = await extractErrorMessage(response);
+        throw new Error(errorMsg);
       }
 
       if (!response.body) {
@@ -202,10 +263,10 @@ class HippocratesAPI {
       body: JSON.stringify({
         message: request.message,
         caseId: request.caseId,
-        attachment: request.attachment,
-        attachments: request.attachments,
+        attachment: sanitizeAttachmentForWire(request.attachment),
+        attachments: request.attachments?.map((a) => sanitizeAttachmentForWire(a)!),
         attachmentType: request.attachmentType,
-        history: request.history,
+        history: sanitizeHistoryForWire(request.history as Array<{ role: string; content: string }>),
         stream: false,
       }),
     });

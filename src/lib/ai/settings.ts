@@ -77,10 +77,12 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
   let dbOpenaiKey: string | null = null;
   let dbProvider: string | null = null;
 
+  let dbFetchSuccess = false;
+
   try {
     const supabase = createSupabaseServiceClient();
     if (supabase) {
-      // 6000ms timeout allows Supabase cold starts / sleep wakeups to complete safely without dropping keys
+      // 8000ms timeout allows Supabase cold starts / sleep wakeups to complete safely without dropping keys
       const queryPromise = supabase
         .from("app_settings")
         .select("active_provider, openai_api_key, gemini_api_key")
@@ -88,13 +90,14 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
         .limit(1)
         .maybeSingle<AppSettingsRow>();
 
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
       const res = await Promise.race([queryPromise, timeoutPromise]);
 
       if (res && "data" in res && !res.error && res.data) {
         dbGeminiKey = res.data.gemini_api_key?.trim() || null;
         dbOpenaiKey = res.data.openai_api_key?.trim() || null;
         dbProvider = res.data.active_provider;
+        dbFetchSuccess = true;
       } else if (res && "error" in res && res.error) {
         console.warn("[getAISettings] Supabase query returned error:", res.error.message);
       }
@@ -103,7 +106,7 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
     console.warn("Could not read app_settings from database:", err);
   }
 
-  // Database takes top priority, then in-memory cache (to prevent cold-start loss), then valid environment variable
+  // Database takes top priority, then existing in-memory cache (to prevent cold-start loss), then valid environment variable
   const validEnvGemini = geminiEnv ? geminiEnv : null;
   const finalGeminiKey =
     dbGeminiKey ||
@@ -126,7 +129,8 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
     geminiApiKey: finalGeminiKey,
     openaiApiKey: finalOpenaiKey,
   };
-  lastSettingsFetchTime = now;
+  // If DB query failed (e.g. cold start), retry sooner (5s) instead of caching nulls for 60s
+  lastSettingsFetchTime = dbFetchSuccess ? now : now - SETTINGS_CACHE_TTL_MS + 5000;
 
   return inMemoryAdminSettings;
 }

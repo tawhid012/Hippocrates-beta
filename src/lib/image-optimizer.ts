@@ -13,8 +13,8 @@ export interface OptimizedImageData {
 
 export async function optimizeMedicalImageForUpload(
   file: File,
-  maxDimension = 1600,
-  quality = 0.82
+  maxDimension = 1200,
+  quality = 0.78
 ): Promise<OptimizedImageData> {
   // If not an image (e.g. PDF), read base64 directly
   if (!file.type.startsWith("image/")) {

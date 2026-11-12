@@ -100,6 +100,7 @@ function sanitizeAttachmentForStorage(att?: ChatAttachment): ChatAttachment | un
   return {
     ...att,
     dataUrl: isOversized ? undefined : att.dataUrl,
+    fileBase64: undefined, // Never persist raw multi-megabyte base64 in database JSONB
   };
 }
 

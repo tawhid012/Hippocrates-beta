@@ -4,9 +4,8 @@ export const DEFAULT_GEMINI_MODEL = "gemini-flash-lite-latest";
 
 export const SUPPORTED_GEMINI_MODELS = [
   "gemini-flash-lite-latest",
-  "gemini-flash-latest",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
 ] as const;
 
 /**
@@ -19,16 +18,15 @@ export function getGeminiCandidateModels(): string[] {
     new Set([
       preferred,
       "gemini-flash-lite-latest",
-      "gemini-flash-latest",
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
+      "gemini-3.5-flash-lite",
+      "gemini-3.8-flash",
     ])
   );
 }
 
 /**
  * Returns the sanitized Gemini model identifier.
- * Ensures invalid tokens or dangerous strings are filtered,
+ * Ensures invalid tokens, deprecated models, or API keys are filtered,
  * allowing standard Gemini models with a safe, verified default.
  */
 export function getGeminiModelName(): string {
@@ -36,8 +34,10 @@ export function getGeminiModelName(): string {
   if (
     envModel &&
     !envModel.startsWith("AQ.") &&
+    !envModel.startsWith("AIza") &&
     !envModel.includes("/") &&
     !envModel.includes("..") &&
+    !envModel.includes("2.5") &&
     envModel.length <= 64
   ) {
     return envModel;

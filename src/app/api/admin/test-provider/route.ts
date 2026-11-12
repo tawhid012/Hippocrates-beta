@@ -46,6 +46,18 @@ export async function POST(request: Request) {
         400
       );
     }
+    if (rawError === "QUOTA_EXCEEDED" || rawError.includes("quota") || rawError.includes("RESOURCE_EXHAUSTED")) {
+      return apiError(
+        "Quota exceeded: This Gemini API key has exceeded its daily free-tier rate limits. Please upgrade billing in Google AI Studio or provide a fresh key.",
+        400
+      );
+    }
+    if (rawError === "TIMEOUT") {
+      return apiError(
+        "Connection test timed out after 12 seconds. Google servers may be slow or experiencing high latency. Please retry.",
+        408
+      );
+    }
     return apiError(rawError, 400);
   }
 }

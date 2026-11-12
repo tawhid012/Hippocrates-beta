@@ -195,7 +195,6 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             size: firstAtt.fileSize,
             dataUrl: firstAtt.dataUrl,
             attachmentType: firstAtt.attachmentType,
-            fileBase64: firstAtt.fileBase64,
           }
         : undefined,
       attachments:
@@ -206,7 +205,6 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
               size: a.fileSize,
               dataUrl: a.dataUrl,
               attachmentType: a.attachmentType,
-              fileBase64: a.fileBase64,
             }))
           : undefined,
     };
@@ -272,8 +270,6 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
           history: messagesRef.current.slice(-20).map(m => ({
             role: m.role,
             content: m.content,
-            attachment: m.attachment,
-            attachments: m.attachments,
           }))
         },
         {
@@ -352,6 +348,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
                       ...(response.messages?.assistant ?? message),
                       consultationId: finalCaseId,
                       content: response.reply || message.content,
+                      status: "completed" as const,
                       isStreaming: false,
                       safetyEvaluation: response.safetyEvaluation,
                       reportAnalysis: response.reportAnalysis,
@@ -411,6 +408,23 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             ) {
               humanMessage = "Network connection interrupted. Please check your internet connection and click Retry.";
             } else if (
+              errMsg.includes("quota") ||
+              errMsg.includes("RESOURCE_EXHAUSTED") ||
+              errMsg.includes("429")
+            ) {
+              humanMessage = "Google Gemini daily request quota reached. Please check your AI Studio quota or configure an active API key in Settings.";
+            } else if (
+              errMsg.includes("503") ||
+              errMsg.includes("high demand") ||
+              errMsg.includes("UNAVAILABLE")
+            ) {
+              humanMessage = "AI servers are experiencing temporary high demand. Please click Retry in a moment.";
+            } else if (
+              errMsg.includes("TIMEOUT") ||
+              errMsg.includes("timeout")
+            ) {
+              humanMessage = "Response took too long to complete due to slow network connectivity. Please click Retry.";
+            } else if (
               errMsg.includes("API key not valid") ||
               errMsg.includes("UNAUTHENTICATED") ||
               errMsg.includes("API_KEY_INVALID") ||
@@ -431,6 +445,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
                   ? {
                       ...item,
                       content: humanMessage,
+                      status: "error" as const,
                       isStreaming: false,
                     }
                   : item
@@ -453,6 +468,23 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
       ) {
         humanMessage = "Network connection interrupted. Please check your internet connection and click Retry.";
       } else if (
+        errMsg.includes("quota") ||
+        errMsg.includes("RESOURCE_EXHAUSTED") ||
+        errMsg.includes("429")
+      ) {
+        humanMessage = "Google Gemini daily request quota reached. Please check your AI Studio quota or configure an active API key in Settings.";
+      } else if (
+        errMsg.includes("503") ||
+        errMsg.includes("high demand") ||
+        errMsg.includes("UNAVAILABLE")
+      ) {
+        humanMessage = "AI servers are experiencing temporary high demand. Please click Retry in a moment.";
+      } else if (
+        errMsg.includes("TIMEOUT") ||
+        errMsg.includes("timeout")
+      ) {
+        humanMessage = "Response took too long to complete due to slow network connectivity. Please click Retry.";
+      } else if (
         errMsg.includes("API key not valid") ||
         errMsg.includes("UNAUTHENTICATED") ||
         errMsg.includes("API_KEY_INVALID") ||
@@ -471,6 +503,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             ? {
                 ...item,
                 content: humanMessage,
+                status: "error" as const,
                 isStreaming: false,
               }
             : item

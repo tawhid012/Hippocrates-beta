@@ -21,6 +21,7 @@ import {
 } from "@/services/aegis/aegisCaseState";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 function isGreetingMessage(message: string): boolean {
   const clean = message.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
@@ -367,11 +368,20 @@ export async function POST(request: Request) {
       });
     }
 
-    // High-performance SSE Streaming
+    // High-performance SSE Streaming with active connection keep-alive
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
+        // SSE Heartbeat interval: sends comment ping every 3.5s to prevent Safari/mobile sockets from dropping during AI image analysis
+        const pingInterval = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(": ping\n\n"));
+          } catch {
+            clearInterval(pingInterval);
+          }
+        }, 3500);
+
         try {
           controller.enqueue(
             encoder.encode(`event: init\ndata: ${JSON.stringify({ caseId: finalCaseId })}\n\n`)
@@ -484,6 +494,8 @@ export async function POST(request: Request) {
             encoder.encode(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`)
           );
           controller.close();
+        } finally {
+          clearInterval(pingInterval);
         }
       },
     });
