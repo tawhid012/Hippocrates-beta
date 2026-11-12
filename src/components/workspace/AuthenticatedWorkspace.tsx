@@ -34,13 +34,40 @@ export function AuthenticatedWorkspace() {
   const [casesLoading, setCasesLoading] = useState(true);
 
   const loadCases = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setCasesLoading(false);
+      return;
+    }
     setCasesLoading(true);
+    const workspace = persona === "patient" ? "aegis" : "oracle";
+    const cacheKey = `hippocrates_cached_cases_${user.id}_${workspace}`;
+
     try {
-      const workspace = persona === "patient" ? "aegis" : "oracle";
-      setCases(await api.listCases(workspace));
-    } catch {
-      setCases([]);
+      const fetched = await api.listCases(workspace);
+      setCases(fetched);
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(fetched));
+        } catch {
+          // ignore storage quota
+        }
+      }
+    } catch (err) {
+      console.warn("[AuthenticatedWorkspace] Failed to fetch cases from network, falling back to cache:", err);
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            setCases(JSON.parse(cached));
+          } else {
+            setCases([]);
+          }
+        } catch {
+          setCases([]);
+        }
+      } else {
+        setCases([]);
+      }
     } finally {
       setCasesLoading(false);
     }
@@ -71,6 +98,7 @@ export function AuthenticatedWorkspace() {
       void loadCases();
     } else if (!user) {
       setCases([]);
+      setCasesLoading(false);
     }
   }, [persona, user, loadCases]);
 

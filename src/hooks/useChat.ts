@@ -195,6 +195,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             size: firstAtt.fileSize,
             dataUrl: firstAtt.dataUrl,
             attachmentType: firstAtt.attachmentType,
+            fileBase64: firstAtt.fileBase64,
           }
         : undefined,
       attachments:
@@ -205,6 +206,7 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
               size: a.fileSize,
               dataUrl: a.dataUrl,
               attachmentType: a.attachmentType,
+              fileBase64: a.fileBase64,
             }))
           : undefined,
     };
@@ -398,15 +400,28 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
             hasError = true;
             let humanMessage = "Something went wrong while generating the response.";
             const errMsg = err?.message || "";
+            const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
             if (
+              isOffline ||
+              errMsg.includes("Failed to fetch") ||
+              errMsg.includes("NetworkError") ||
+              errMsg.includes("Load failed") ||
+              errMsg.includes("network")
+            ) {
+              humanMessage = "Network connection interrupted. Please check your internet connection and click Retry.";
+            } else if (
               errMsg.includes("API key not valid") ||
               errMsg.includes("UNAUTHENTICATED") ||
               errMsg.includes("API_KEY_INVALID") ||
               errMsg.includes("MISSING_GEMINI_API_KEY") ||
               errMsg.includes("unable to connect")
             ) {
-              humanMessage = "Unable to connect to the AI engine: Invalid or expired Gemini API key. Please configure a valid key from Google AI Studio (aistudio.google.com) in .env.local or Admin Settings.";
+              humanMessage = "Unable to connect to the AI engine: Invalid or expired Gemini API key. Please configure a valid key from Google AI Studio (aistudio.google.com) in Admin Settings.";
+            } else if (errMsg) {
+              humanMessage = errMsg;
             }
+
             setError(humanMessage);
             setChatStatus("error");
 
@@ -424,9 +439,30 @@ export function useChat(model: AIModelId, options: UseChatOptions = {}): UseChat
           },
         }
       );
-    } catch {
+    } catch (err) {
       hasError = true;
-      const humanMessage = "Something went wrong while generating the response.";
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      let humanMessage = "Something went wrong while generating the response.";
+
+      if (
+        isOffline ||
+        errMsg.includes("Failed to fetch") ||
+        errMsg.includes("NetworkError") ||
+        errMsg.includes("Load failed")
+      ) {
+        humanMessage = "Network connection interrupted. Please check your internet connection and click Retry.";
+      } else if (
+        errMsg.includes("API key not valid") ||
+        errMsg.includes("UNAUTHENTICATED") ||
+        errMsg.includes("API_KEY_INVALID") ||
+        errMsg.includes("MISSING_GEMINI_API_KEY")
+      ) {
+        humanMessage = "Unable to connect to the AI engine: Invalid or expired Gemini API key. Please configure a valid key from Google AI Studio in Admin Settings.";
+      } else if (errMsg) {
+        humanMessage = errMsg;
+      }
+
       setError(humanMessage);
       setChatStatus("error");
       setMessages((prev) =>

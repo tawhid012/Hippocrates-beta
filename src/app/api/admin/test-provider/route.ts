@@ -24,19 +24,29 @@ export async function POST(request: Request) {
 
   let keyToTest = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   if (!keyToTest) {
-    const settings = await getAISettings();
+    const settings = await getAISettings(true);
     keyToTest = body.provider === "gemini" ? settings.geminiApiKey || "" : settings.openaiApiKey || "";
   }
 
   if (!keyToTest) {
-    return apiError("No API key provided or found in database.", 400);
+    return apiError(
+      "No API key provided or found in database. Please enter an API key and click 'Save Key to Database'.",
+      400
+    );
   }
 
   try {
     await testOracleProvider(body.provider, keyToTest);
     return ok({ status: "connected" });
   } catch (error) {
-    return apiError(getUserFacingOracleError(error), 400);
+    const rawError = getUserFacingOracleError(error);
+    if (rawError === "INVALID_API_KEY" || rawError.includes("API key not valid") || rawError.includes("API_KEY_INVALID")) {
+      return apiError(
+        "Invalid API key: Google Gemini rejected this key. Please generate a fresh API key at https://aistudio.google.com and paste it in the field above.",
+        400
+      );
+    }
+    return apiError(rawError, 400);
   }
 }
 

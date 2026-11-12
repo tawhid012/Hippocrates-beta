@@ -200,45 +200,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     // Fetch initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      if (!isMounted) return;
-      setSession(initialSession);
-      const currentUser = initialSession?.user ?? null;
-      setUser(currentUser);
-      syncDoctorRegistration(currentUser);
-      if (currentUser) void syncUserProfile(currentUser);
-      setIsLoading(false);
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: initialSession } }) => {
+        if (!isMounted) return;
+        setSession(initialSession);
+        const currentUser = initialSession?.user ?? null;
+        setUser(currentUser);
+        syncDoctorRegistration(currentUser);
+        if (currentUser) void syncUserProfile(currentUser);
+        setIsLoading(false);
 
-      if (currentUser?.user_metadata?.role === "patient") {
-        // Strict clinical isolation: purge any accidental doctor persona flags
-        if (typeof window !== "undefined") {
-          try {
-            localStorage.removeItem("hippocrates_pending_role");
-            localStorage.setItem("hippocrates_persona", "patient");
-          } catch {
-            // ignore
+        if (currentUser?.user_metadata?.role === "patient") {
+          // Strict clinical isolation: purge any accidental doctor persona flags
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.removeItem("hippocrates_pending_role");
+              localStorage.setItem("hippocrates_persona", "patient");
+            } catch {
+              // ignore
+            }
+          }
+        } else if (currentUser) {
+          const targetPersona = (
+            typeof window !== "undefined"
+              ? (new URLSearchParams(window.location.search).get("persona") ||
+                  localStorage.getItem("hippocrates_persona") ||
+                  localStorage.getItem("hippocrates_pending_role"))
+              : null
+          ) as UserPersona | null;
+
+          const isDr = targetPersona === "doctor" || currentUser.user_metadata?.role === "doctor";
+          const hasReg =
+            currentUser.user_metadata?.doctor_registration_number ||
+            (typeof window !== "undefined" &&
+              localStorage.getItem(`hippocrates_dr_reg_${currentUser.id}`));
+
+          if (isDr && !hasReg) {
+            setDoctorOnboardingOpen(true);
           }
         }
-      } else if (currentUser) {
-        const targetPersona = (
-          typeof window !== "undefined"
-            ? (new URLSearchParams(window.location.search).get("persona") ||
-                localStorage.getItem("hippocrates_persona") ||
-                localStorage.getItem("hippocrates_pending_role"))
-            : null
-        ) as UserPersona | null;
-
-        const isDr = targetPersona === "doctor" || currentUser.user_metadata?.role === "doctor";
-        const hasReg =
-          currentUser.user_metadata?.doctor_registration_number ||
-          (typeof window !== "undefined" &&
-            localStorage.getItem(`hippocrates_dr_reg_${currentUser.id}`));
-
-        if (isDr && !hasReg) {
-          setDoctorOnboardingOpen(true);
-        }
-      }
-    });
+      })
+      .catch((err) => {
+        console.warn("[AuthContext] Session fetch error (network fallback):", err);
+        if (isMounted) setIsLoading(false);
+      });
 
     // Listen for auth state changes (sign in, sign out, token refresh)
     const {

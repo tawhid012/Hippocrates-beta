@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { LandingPage } from "@/components/landing/LandingPage";
+import { WorkspaceErrorBoundary } from "@/components/common/WorkspaceErrorBoundary";
 
 // Dynamically import the heavy clinical authenticated workspace so unauthenticated
 // landing page visitors and crawlers receive an ultra-lightweight initial bundle (<80kB JS)
@@ -45,5 +46,9 @@ export function HomeClient() {
     );
   }
 
-  return <AuthenticatedWorkspace />;
+  return (
+    <WorkspaceErrorBoundary>
+      <AuthenticatedWorkspace />
+    </WorkspaceErrorBoundary>
+  );
 }

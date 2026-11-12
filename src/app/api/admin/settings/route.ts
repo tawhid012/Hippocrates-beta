@@ -40,7 +40,10 @@ export async function PUT(request: Request) {
       geminiApiKey: typeof body.geminiApiKey === "string" ? body.geminiApiKey : undefined,
     });
     return ok(settings);
-  } catch {
-    return apiError("Unable to save admin settings to database.", 500);
+  } catch (err) {
+    return apiError(
+      err instanceof Error ? err.message : "Unable to save admin settings to database.",
+      500
+    );
   }
 }

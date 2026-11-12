@@ -80,27 +80,30 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
   try {
     const supabase = createSupabaseServiceClient();
     if (supabase) {
-      // 500ms timeout for settings fetch to prevent massive TTFT latency if DB is unresponsive
+      // 6000ms timeout allows Supabase cold starts / sleep wakeups to complete safely without dropping keys
       const queryPromise = supabase
         .from("app_settings")
         .select("active_provider, openai_api_key, gemini_api_key")
+        .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle<AppSettingsRow>();
 
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 500));
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
       const res = await Promise.race([queryPromise, timeoutPromise]);
 
       if (res && "data" in res && !res.error && res.data) {
         dbGeminiKey = res.data.gemini_api_key?.trim() || null;
         dbOpenaiKey = res.data.openai_api_key?.trim() || null;
         dbProvider = res.data.active_provider;
+      } else if (res && "error" in res && res.error) {
+        console.warn("[getAISettings] Supabase query returned error:", res.error.message);
       }
     }
   } catch (err) {
     console.warn("Could not read app_settings from database:", err);
   }
 
-  // Database takes top priority, then in-memory cache, then valid environment variable
+  // Database takes top priority, then in-memory cache (to prevent cold-start loss), then valid environment variable
   const validEnvGemini = geminiEnv ? geminiEnv : null;
   const finalGeminiKey =
     dbGeminiKey ||
@@ -108,9 +111,13 @@ export async function getAISettings(forceRefresh = false): Promise<ProviderRunti
     validEnvGemini ||
     null;
 
-  const finalOpenaiKey = dbOpenaiKey || inMemoryAdminSettings?.openaiApiKey || openaiEnv;
-  const rawProvider = dbProvider || inMemoryAdminSettings?.activeProvider;
+  const finalOpenaiKey =
+    dbOpenaiKey ||
+    inMemoryAdminSettings?.openaiApiKey ||
+    openaiEnv ||
+    null;
 
+  const rawProvider = dbProvider || inMemoryAdminSettings?.activeProvider;
   const activeProvider = normalizeProvider(rawProvider, finalGeminiKey, finalOpenaiKey);
 
   // Sync memory cache
@@ -157,39 +164,52 @@ export async function updateAdminSettings(input: UpdateAdminSettingsInput): Prom
 
   const newActiveProvider = input.activeProvider || current.activeProvider;
 
-  // Update in-memory cache immediately
+  // Persist to Supabase database with error propagation
+  const supabase = createSupabaseServiceClient();
+  if (supabase) {
+    const payload = {
+      active_provider: newActiveProvider,
+      gemini_api_key: newGeminiKey,
+      openai_api_key: newOpenaiKey,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: existing, error: findError } = await supabase
+      .from("app_settings")
+      .select("id")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<Pick<AppSettingsRow, "id">>();
+
+    if (findError) {
+      console.warn("[updateAdminSettings] Could not query existing row:", findError.message);
+    }
+
+    if (existing?.id) {
+      const { error: updateError } = await supabase
+        .from("app_settings")
+        .update(payload)
+        .eq("id", existing.id);
+      if (updateError) {
+        throw new Error(`Failed to update database settings: ${updateError.message}`);
+      }
+    } else {
+      const { error: insertError } = await supabase
+        .from("app_settings")
+        .insert(payload);
+      if (insertError) {
+        throw new Error(`Failed to insert database settings: ${insertError.message}`);
+      }
+    }
+  }
+
+  // Update in-memory cache immediately upon successful persist
   inMemoryAdminSettings = {
     activeProvider: newActiveProvider,
     geminiApiKey: newGeminiKey,
     openaiApiKey: newOpenaiKey,
   };
-
-  // Persist to Supabase database
-  try {
-    const supabase = createSupabaseServiceClient();
-    if (supabase) {
-      const payload = {
-        active_provider: newActiveProvider,
-        gemini_api_key: newGeminiKey,
-        openai_api_key: newOpenaiKey,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data: existing, error: findError } = await supabase
-        .from("app_settings")
-        .select("id")
-        .limit(1)
-        .maybeSingle<Pick<AppSettingsRow, "id">>();
-
-      if (!findError && existing?.id) {
-        await supabase.from("app_settings").update(payload).eq("id", existing.id);
-      } else {
-        await supabase.from("app_settings").insert(payload);
-      }
-    }
-  } catch (err) {
-    console.error("Failed to persist app_settings to Supabase database:", err);
-  }
+  lastSettingsFetchTime = Date.now();
 
   return getAdminSettings();
 }

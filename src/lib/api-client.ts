@@ -79,9 +79,13 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
     const client = createBrowserSupabaseClient();
     if (client) {
-      const {
-        data: { session },
-      } = await client.auth.getSession();
+      // 2000ms guard to ensure network stalls during Supabase token refresh never freeze the UI
+      const sessionPromise = client.auth.getSession();
+      const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { session: null } }), 2000)
+      );
+      const res = await Promise.race([sessionPromise, timeoutPromise]);
+      const session = res?.data?.session;
       if (session?.access_token) {
         return {
           Authorization: `Bearer ${session.access_token}`,
@@ -214,14 +218,21 @@ class HippocratesAPI {
     const url = workspace
       ? `${this.baseUrl}/cases?workspace=${encodeURIComponent(workspace)}`
       : `${this.baseUrl}/cases`;
-    const response = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        ...authHeaders,
-      },
-    });
-    const body = await parseResponse<{ cases: CaseSummary[] }>(response);
-    return body.cases;
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: controller?.signal,
+        headers: {
+          ...authHeaders,
+        },
+      });
+      const body = await parseResponse<{ cases: CaseSummary[] }>(response);
+      return body.cases || [];
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
   }
 
   async createCase(title?: string, workspace: "oracle" | "aegis" = "oracle"): Promise<CaseSummary> {

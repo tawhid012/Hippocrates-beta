@@ -59,7 +59,9 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
   const isPatient = persona === "patient";
   const isError =
     message.content === "Something went wrong while generating the response." ||
-    message.content.startsWith("Unable to connect to the AI engine");
+    message.content.startsWith("Unable to connect to the AI engine") ||
+    message.content.startsWith("Network connection interrupted") ||
+    message.content.startsWith("Aegis is temporarily unable");
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -155,9 +157,9 @@ export const Message = memo(function Message({ message, onRegenerate, onRetry }:
         {isError ? (
           <div className="rounded-xl px-4 py-3 bg-red-50 border border-red-200 shadow-xs space-y-2 max-w-md">
             <p className="text-xs sm:text-sm text-red-800 font-medium leading-relaxed">
-              {message.content.startsWith("Unable to connect")
+              {message.content && message.content !== "Something went wrong while generating the response."
                 ? message.content
-                : "Sorry, I couldn't complete that response."}
+                : "Sorry, I couldn't complete that response. Please check your connection and try again."}
             </p>
             {onRetry && (
               <Button

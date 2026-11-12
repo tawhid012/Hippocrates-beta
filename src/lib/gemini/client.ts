@@ -30,12 +30,6 @@ export async function getGeminiClient(customApiKey?: string): Promise<GoogleGenA
   if (!client) {
     client = new GoogleGenAI({
       apiKey,
-      httpOptions: {
-        headers: {
-          Referer: "https://www.hippocrates.in/",
-          Origin: "https://www.hippocrates.in",
-        },
-      },
     });
     clientCache.set(apiKey, client);
   }
