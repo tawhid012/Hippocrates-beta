@@ -22,18 +22,21 @@ interface MessageProps {
 }
 
 function AttachmentPreviewItem({ attachment }: { attachment: ChatAttachment }) {
-  const isImage = attachment.attachmentType === "medical_image" || attachment.type.startsWith("image/");
+  const isPhysicalPhoto =
+    attachment.attachmentType === "medical_image" ||
+    (attachment.type.startsWith("image/") && attachment.attachmentType !== "lab_report");
+  const hasPreviewImage = attachment.type.startsWith("image/") && Boolean(attachment.dataUrl);
 
   return (
     <div className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 p-1.5 pr-3 text-xs text-slate-700 dark:text-slate-200 font-medium border border-slate-200/80 dark:border-slate-700 shadow-xs max-w-full">
-      {isImage && attachment.dataUrl ? (
+      {hasPreviewImage ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={attachment.dataUrl}
           alt={attachment.name}
           className="h-9 w-9 rounded-lg object-cover border border-slate-300 dark:border-slate-600 shrink-0"
         />
-      ) : isImage ? (
+      ) : isPhysicalPhoto ? (
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 shrink-0">
           <ImageIcon className="h-4 w-4" />
         </div>
@@ -45,7 +48,7 @@ function AttachmentPreviewItem({ attachment }: { attachment: ChatAttachment }) {
       <div className="min-w-0 flex flex-col">
         <span className="truncate text-xs font-medium">{attachment.name}</span>
         <span className="text-[10px] text-slate-500">
-          {isImage ? "Physical photo" : "Lab report"}
+          {isPhysicalPhoto ? "Physical photo" : "Lab report"}
         </span>
       </div>
     </div>

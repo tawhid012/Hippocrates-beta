@@ -16,6 +16,7 @@ const testSuites = [
   { name: "Aegis Master Restoration & Progression Suite", cmd: "node", args: ["tests/clinical/test-aegis-restoration.mjs"] },
   { name: "SEO, Schema & Canonical Architecture Suite", cmd: "node", args: ["--test", "tests/security/seo-engine.test.mjs"] },
   { name: "Aegis Production Latency & Clinical Safety Suite", cmd: "node", args: ["tests/clinical/test-latency-safety-regression.mjs"] },
+  { name: "Lab Report Extraction & Multimodal Resilience Suite", cmd: "node", args: ["tests/clinical/test-lab-report-extraction.mjs"] },
 ];
 
 console.log("================================================================================");

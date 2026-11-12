@@ -5,8 +5,8 @@ import { getGeminiCandidateModels } from "./config";
 // In-memory model circuit breaker with cooldown timestamps
 const modelCooldowns = new Map<string, number>();
 
-// TTFT guard: allow up to 15000ms for initial token before failover, accommodating multimodal image OCR & network variance
-const FIRST_TOKEN_TIMEOUT_MS = 15_000;
+// TTFT guard: allow up to 20000ms for initial token before failover, accommodating multimodal image OCR & network variance
+const FIRST_TOKEN_TIMEOUT_MS = 20_000;
 const COOLDOWN_DURATION_MS = 60_000; // 60 seconds cooldown for transient spikes
 
 export function markModelCooldown(model: string, durationMs = COOLDOWN_DURATION_MS) {

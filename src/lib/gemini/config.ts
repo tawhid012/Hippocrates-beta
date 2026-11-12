@@ -16,8 +16,8 @@ export function getGeminiCandidateModels(): string[] {
   const preferred = getGeminiModelName();
   return Array.from(
     new Set([
-      preferred,
       "gemini-flash-lite-latest",
+      preferred,
       "gemini-3.5-flash-lite",
       "gemini-3.8-flash",
     ])

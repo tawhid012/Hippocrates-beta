@@ -137,6 +137,12 @@ export async function POST(request: Request) {
     .filter((a) => a && a.fileBase64)
     .map((a) => {
       let resolvedMime = a.mimeType || "";
+      if (resolvedMime.includes(";")) {
+        resolvedMime = resolvedMime.split(";")[0].trim();
+      }
+      if (resolvedMime.toLowerCase() === "image/jpg") {
+        resolvedMime = "image/jpeg";
+      }
       if (!resolvedMime || resolvedMime === "application/octet-stream") {
         const lower = (a.fileName || "").toLowerCase();
         if (lower.endsWith(".png")) resolvedMime = "image/png";
@@ -486,10 +492,13 @@ export async function POST(request: Request) {
 
           controller.close();
         } catch (err) {
-          const msg =
+          const cause = (err as { cause?: unknown })?.cause;
+          const causeMsg = cause instanceof Error ? cause.message : typeof cause === "string" ? cause : undefined;
+          const baseMsg =
             err instanceof AegisServiceError
-              ? err.userFacingMessage + " DETAILS: " + ((err.cause as Error)?.message || String(err.cause))
+              ? err.userFacingMessage
               : (err as Error)?.message || "Aegis is temporarily unable to respond. Please try again.";
+          const msg = causeMsg ? `${baseMsg} (${causeMsg})` : baseMsg;
           controller.enqueue(
             encoder.encode(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`)
           );

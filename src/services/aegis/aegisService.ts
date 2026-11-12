@@ -3,7 +3,12 @@ import "server-only";
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiClient } from "@/lib/gemini/client";
 import { getGeminiCandidateModels } from "@/lib/gemini/config";
-import { streamGeminiWithFastFailover } from "@/lib/gemini/fastStream";
+import {
+  streamGeminiWithFastFailover,
+  getAvailableCandidateModels,
+  isFatalProviderError,
+  markModelCooldown,
+} from "@/lib/gemini/fastStream";
 import { buildSanitizedGeminiContents } from "@/lib/gemini/contents";
 import {
   AEGIS_SYSTEM_PROMPT,
@@ -74,10 +79,28 @@ export interface AegisStreamChunk {
 export class AegisServiceError extends Error {
   userFacingMessage: string;
   constructor(userFacingMessage: string, rawError?: unknown) {
-    super(typeof rawError === "string" ? rawError : (rawError as Error)?.message || userFacingMessage);
+    const detailMsg = typeof rawError === "string" ? rawError : (rawError as Error)?.message;
+    super(detailMsg || userFacingMessage, rawError !== undefined ? { cause: rawError } : undefined);
     this.userFacingMessage = userFacingMessage;
     this.name = "AegisServiceError";
+    if (rawError !== undefined) {
+      (this as unknown as { cause: unknown }).cause = rawError;
+    }
   }
+}
+
+export function normalizeAttachmentMimeType(rawMime: string, fileName?: string): string {
+  const lower = (rawMime || "").toLowerCase().trim();
+  const ext = (fileName || "").split(".").pop()?.toLowerCase();
+
+  if (lower.includes("pdf") || ext === "pdf") return "application/pdf";
+  if (lower.includes("png") || ext === "png") return "image/png";
+  if (lower.includes("webp") || ext === "webp") return "image/webp";
+  if (lower.includes("heic") || ext === "heic") return "image/heic";
+  if (lower.includes("heif") || ext === "heif") return "image/heif";
+  if (lower.includes("jpeg") || lower.includes("jpg") || ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (lower.startsWith("image/")) return "image/jpeg";
+  return "application/pdf";
 }
 
 function normalizeLabStatus(status: unknown): LabResultStatus {
@@ -96,14 +119,45 @@ function normalizeLabStatus(status: unknown): LabResultStatus {
   return "UNKNOWN";
 }
 
-function parseJsonSafely(raw: string): Record<string, unknown> | null {
-  const jsonMatch = raw.match(/```json\s*([\s\S]*?)\s*```/) || raw.match(/([\{\[][\s\S]*[\}\]])/);
-  const target = jsonMatch ? jsonMatch[1] : raw;
-  try {
-    return JSON.parse(target);
-  } catch {
-    return null;
+export function parseJsonSafely(raw: string): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "string") return null;
+  let text = raw.trim();
+
+  // 1. Strip markdown fences if present
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenceMatch && fenceMatch[1]) {
+    text = fenceMatch[1].trim();
   }
+
+  // 2. Locate outermost JSON object boundaries
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    text = text.slice(firstBrace, lastBrace + 1);
+  }
+
+  // 3. Attempt direct parse
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Continue to sanitize
+  }
+
+  // 4. Sanitize trailing commas before closing braces/brackets
+  try {
+    const sanitized = text.replace(/,\s*([\}\]])/g, "$1");
+    const parsed = JSON.parse(sanitized);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Final fallback: return null
+  }
+
+  return null;
 }
 
 export function formatReportResponse(fileName: string, analysis: ReportAnalysisResult): string {
@@ -282,6 +336,81 @@ async function* streamWithCandidateFallback(
 }
 
 /**
+ * Dedicated multimodal extractor for lab/medical reports (PDFs, lab photos).
+ * Uses a generous 35-second generation race per model, prioritizes JSON schema extraction,
+ * provides plain-text fallback on the same model, and gracefully cascades to the next candidate model
+ * if a model experiences 503 high demand or network timeout.
+ */
+async function generateReportContentWithFallback(
+  ai: GoogleGenAI,
+  models: string[],
+  parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }>
+): Promise<{ rawText: string; modelUsed: string }> {
+  const prioritizedModels = getAvailableCandidateModels(models);
+  let lastError: unknown = null;
+
+  for (const model of prioritizedModels) {
+    const t0 = Date.now();
+    try {
+      // 1. Primary: JSON-mode extraction with 35s timeout
+      const generatePromise = ai.models.generateContent({
+        model,
+        contents: [{ role: "user", parts }],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Model ${model} report extraction timeout (exceeded 35s)`)),
+          35_000
+        )
+      );
+
+      const res = await Promise.race([generatePromise, timeoutPromise]);
+      const rawText = res.text?.trim() || "";
+      if (rawText) {
+        return { rawText, modelUsed: model };
+      }
+    } catch (err: unknown) {
+      lastError = err;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Aegis] Model ${model} JSON report analysis failed after ${Date.now() - t0}ms:`, errMsg);
+
+      if (isFatalProviderError(err)) {
+        throw err;
+      }
+
+      // 2. Secondary fallback on same model: plain text mode in case model rejects responseMimeType
+      try {
+        const textFallbackPromise = ai.models.generateContent({
+          model,
+          contents: [{ role: "user", parts }],
+        });
+        const textRes = await Promise.race([
+          textFallbackPromise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Model ${model} text fallback timeout`)), 20_000)
+          ),
+        ]);
+        const textOutput = textRes.text?.trim() || "";
+        if (textOutput) {
+          return { rawText: textOutput, modelUsed: model };
+        }
+      } catch (fallbackErr: unknown) {
+        console.warn(`[Aegis] Model ${model} plain text fallback also failed:`, fallbackErr);
+      }
+
+      // Mark model on cooldown if it failed (e.g. 503 high demand or timeout)
+      markModelCooldown(model);
+    }
+  }
+
+  throw lastError || new Error("All candidate models failed to analyze the report.");
+}
+
+/**
  * Streams Aegis responses natively with time-to-first-token optimization.
  */
 export async function* askAegisServiceStream(
@@ -338,10 +467,8 @@ export async function* askAegisServiceStream(
           if (dataUrlMatch && dataUrlMatch[1]) {
             mime = dataUrlMatch[1];
           }
-          if (!mime.startsWith("image/")) {
-            mime = "image/jpeg";
-          }
-          const base64Data = img.fileBase64.replace(/^data:[^;]+;base64,/, "").trim();
+          mime = normalizeAttachmentMimeType(mime, img.fileName);
+          const base64Data = img.fileBase64.replace(/^data:[^;]+;base64,/, "").replace(/\s+/g, "").trim();
           parts.push({
             inlineData: {
               mimeType: mime,
@@ -399,12 +526,18 @@ export async function* askAegisServiceStream(
     const tStart = Date.now();
 
     try {
-      const isPdf = primaryAttachment.mimeType.includes("pdf");
-      const isImage = primaryAttachment.mimeType.includes("image");
-      const base64Data = primaryAttachment.fileBase64.replace(/^data:[^;]+;base64,/, "");
+      const normalizedMime = normalizeAttachmentMimeType(primaryAttachment.mimeType, primaryAttachment.fileName);
+      const cleanBase64 = primaryAttachment.fileBase64
+        .replace(/^data:[^;]+;base64,/, "")
+        .replace(/\s+/g, "")
+        .trim();
+
+      if (!cleanBase64) {
+        throw new AegisServiceError("The uploaded report is empty or unreadable. Please try again with a clear image or PDF.");
+      }
 
       // 1. Check in-memory deduplication cache
-      const cacheHash = computeReportHash(base64Data, prompt);
+      const cacheHash = computeReportHash(cleanBase64, prompt);
       const cached = getCachedReport(cacheHash);
 
       if (cached) {
@@ -434,45 +567,24 @@ export async function* askAegisServiceStream(
       const parts: Array<
         | { inlineData: { mimeType: string; data: string } }
         | { text: string }
-      > = [];
-
-      if (isImage || isPdf) {
-        parts.push({
+      > = [
+        {
           inlineData: {
-            mimeType: primaryAttachment.mimeType,
-            data: base64Data,
+            mimeType: normalizedMime,
+            data: cleanBase64,
           },
-        });
-      }
-
-      parts.push({
-        text: `${AEGIS_REPORT_PROMPT}\n\nPatient Note: ${prompt || "Analyze this report and return structured JSON."}`,
-      });
-
-      // 3. True streaming generation from Gemini with JSON response schema
-      const streamResponse = streamWithCandidateFallback(ai, candidateModels, {
-        contents: [{ role: "user", parts }],
-        config: {
-          responseMimeType: "application/json",
         },
-      });
+        {
+          text: `${AEGIS_REPORT_PROMPT}\n\nPatient Note: ${prompt || "Analyze this report and return structured JSON."}`,
+        },
+      ];
 
-      let rawOutput = "";
-      let firstTokenMs: number | null = null;
-
-      for await (const chunk of streamResponse) {
-        const text = chunk.text;
-        if (text) {
-          if (firstTokenMs === null) {
-            firstTokenMs = Date.now() - tStart;
-          }
-          rawOutput += text;
-        }
-      }
-
+      // 3. Robust multimodal extraction with candidate fallback and generous timeout
+      const { rawText } = await generateReportContentWithFallback(ai, candidateModels, parts);
       const totalGenMs = Date.now() - tStart;
+
       let reportAnalysis: ReportAnalysisResult | undefined = undefined;
-      const parsed = parseJsonSafely(rawOutput.trim());
+      const parsed = parseJsonSafely(rawText);
 
       if (parsed) {
         const resultsSource = Array.isArray(parsed.results)
@@ -510,7 +622,7 @@ export async function* askAegisServiceStream(
           tests,
           results: tests,
           metrics: {
-            ttftMs: firstTokenMs || 0,
+            ttftMs: totalGenMs,
             extractionMs: totalGenMs,
             totalMs: Date.now() - tStart,
             cached: false,
@@ -521,13 +633,13 @@ export async function* askAegisServiceStream(
           report_type: "Medical Report",
           tests: [],
           results: [],
-          overall_summary: rawOutput || "Report uploaded and reviewed.",
-          key_findings: [rawOutput],
+          overall_summary: rawText || "Report uploaded and reviewed.",
+          key_findings: [rawText],
           red_flags: [],
           potential_red_flags: [],
           questions_for_doctor: [],
           metrics: {
-            ttftMs: firstTokenMs || 0,
+            ttftMs: totalGenMs,
             extractionMs: totalGenMs,
             totalMs: Date.now() - tStart,
             cached: false,
@@ -560,6 +672,9 @@ export async function* askAegisServiceStream(
       };
       return;
     } catch (error: unknown) {
+      if (error instanceof AegisServiceError) {
+        throw error;
+      }
       throw new AegisServiceError(
         "Aegis was unable to process the uploaded report. Please try again with a clear image or PDF.",
         error

@@ -4,6 +4,7 @@ import { evaluateSafety } from "@/lib/aegis/safety";
 import type { ReportAnalysisResult, SafetyEvaluation } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const t0 = Date.now();
