@@ -3,11 +3,37 @@ import type { NormalizedClinicalSummary, ModelType, MedicationDiscussionItem } f
 import { validateClinicalDocument } from "./validateClinicalDocument";
 import { getGeminiCandidateModels } from "@/lib/gemini/config";
 import { createSupabaseServiceClient } from "@/lib/supabase/server";
+import { getActiveGeminiApiKey } from "@/lib/gemini/client";
 
 const DEFAULT_DISCLAIMER =
   "IMPORTANT DISCLAIMER: This document was generated with assistance from Hippocrates AI using information provided during the patient conversation and, where applicable, uploaded health documents. It is intended to organize and explain health information and does not constitute a confirmed medical diagnosis, medical advice, or a legally valid prescription. AI-generated information may contain omissions or inaccuracies and should be reviewed by an appropriately licensed healthcare professional before making clinical or treatment decisions. Seek urgent medical attention for severe or rapidly worsening symptoms.";
 
 const DEFAULT_COPYRIGHT = "© 2026 Hippocrates AI Clinical Platform. All rights reserved.";
+
+export function isFileUploadString(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  return (
+    /^Uploaded (?:photo|medical report|report|\d+ physical health photos?):?/i.test(t) ||
+    /^Screenshot\s+[\d\-_.\s]+(?:AM|PM)?\.(?:png|jpg|jpeg|webp)$/i.test(t) ||
+    /^[a-zA-Z0-9_\-.]+\.(?:png|jpg|jpeg|webp|pdf)$/i.test(t)
+  );
+}
+
+export function sanitizePatientSymptomText(text: string | undefined | null): string {
+  if (!text) return "General health consultation";
+  const trimmed = text.trim();
+  if (isFileUploadString(trimmed)) {
+    const afterNotice = trimmed
+      .replace(/^Uploaded (?:photo|medical report|report|\d+ physical health photos?):?\s*[^.\n]+\.(?:png|jpg|jpeg|webp|pdf)\s*/i, "")
+      .trim();
+    if (afterNotice && afterNotice.length > 3) {
+      return afterNotice;
+    }
+    return "Physical health photograph submitted for clinical visual assessment";
+  }
+  return trimmed;
+}
 
 /**
  * Generates a clinically meaningful document title from conversation content.
@@ -19,8 +45,14 @@ export function generateConversationTitle(
   messages: Array<{ role: string; content: string }>,
   chiefComplaint?: string | null
 ): string {
-  // Priority 1: Use an extracted chief complaint if available
-  if (chiefComplaint && chiefComplaint.length > 2 && chiefComplaint !== "null" && chiefComplaint.toLowerCase() !== "none") {
+  // Priority 1: Use an extracted chief complaint if available and not an upload string
+  if (
+    chiefComplaint &&
+    chiefComplaint.length > 2 &&
+    chiefComplaint !== "null" &&
+    chiefComplaint.toLowerCase() !== "none" &&
+    !isFileUploadString(chiefComplaint)
+  ) {
     const clean = chiefComplaint
       .replace(/^(chief complaint:|cc:|presenting with|evaluation of|patient reports|patient experiencing)/i, "")
       .trim();
@@ -36,13 +68,22 @@ export function generateConversationTitle(
     "greetings", "howdy", "sup", "can you hear me", "testing"
   ];
 
+  // Find first message that has real patient-described symptoms (not upload notices)
   const firstMeaningfulMessage = messages.find((m) => {
     if (m.role !== "user") return false;
     const clean = m.content.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "");
-    return clean.length > 5 && !greetingPhrases.some(p => clean === p || clean.startsWith(p + " "));
+    return (
+      clean.length > 3 &&
+      !greetingPhrases.some((p) => clean === p || clean.startsWith(p + " ")) &&
+      !isFileUploadString(m.content)
+    );
   });
 
   if (!firstMeaningfulMessage) {
+    const hasUpload = messages.some((m) => isFileUploadString(m.content));
+    if (hasUpload) {
+      return "Clinical Assessment — Visual Health Photo Review";
+    }
     return "Clinical Assessment & Care Plan";
   }
 
@@ -86,7 +127,7 @@ export function generateConversationTitle(
 export interface GenerateSummaryParams {
   conversationId: string;
   model: ModelType;
-  messages?: Array<{ role: string; content: string; attachment?: unknown; reportAnalysis?: unknown }>;
+  messages?: Array<{ role: string; content: string; attachment?: unknown; reportAnalysis?: unknown; visualAnalysisSummary?: string }>;
   transcript?: string;
   elevenlabsConversationId?: string;
   patientInfo?: {
@@ -300,7 +341,11 @@ export async function generateClinicalSummary(
     fullText += "CHAT CONVERSATION HISTORY:\n";
     for (const msg of messages) {
       const roleLabel = msg.role === "user" ? "PATIENT" : "AEGIS AI";
-      fullText += `${roleLabel}: ${msg.content}\n`;
+      const cleanContent = sanitizePatientSymptomText(msg.content);
+      fullText += `${roleLabel}: ${cleanContent}\n`;
+      if (msg.visualAnalysisSummary) {
+        fullText += `[ATTACHED PHYSICAL HEALTH IMAGE VISUAL ASSESSMENT: ${msg.visualAnalysisSummary}]\n`;
+      }
       if (msg.reportAnalysis) {
         fullText += `[ATTACHED REPORT ANALYSIS SUMMARY: ${JSON.stringify(msg.reportAnalysis)}]\n`;
       }
@@ -380,6 +425,11 @@ I. RISK STATUS:
    ROUTINE: Non-emergency medical assessment appropriate
    SELF_CARE: Manage with general measures plus clear red-flag monitoring
    UNKNOWN: Insufficient information to classify
+
+J. IMAGE & DOCUMENT UPLOADS:
+   - When a patient uploads an image or screenshot (e.g. "Uploaded photo: Screenshot..."), NEVER repeat raw filenames or upload labels as a chief complaint, title, or symptom!
+   - Describe the actual clinical context (e.g. "Physical health photograph submitted for clinical visual assessment" or the specific visible skin/physical findings described in the conversation).
+   - If the visual assessment noted visible symptoms (e.g. rash, lesion, swelling, erythema), synthesize THOSE findings as the presenting concern, NOT the filename string!
 
 
 === JSON SCHEMA ===
@@ -465,7 +515,14 @@ ${fullText}
   const modelsToTry = getGeminiCandidateModels();
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!apiKey) {
+      try {
+        apiKey = await getActiveGeminiApiKey();
+      } catch (keyErr) {
+        console.warn("[ClinicalSummary] No active Gemini key found via getActiveGeminiApiKey:", keyErr);
+      }
+    }
     if (apiKey) {
       const ai = new GoogleGenAI({ apiKey });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -567,29 +624,36 @@ ${fullText}
     return clean.length > 0 && !greetingPhrases.includes(clean);
   });
 
-  const fallbackText = firstMeaningfulMessage ? firstMeaningfulMessage.content : "General patient health inquiry.";
+  const rawFallback = firstMeaningfulMessage ? firstMeaningfulMessage.content : "General patient health inquiry.";
+  const fallbackText = sanitizePatientSymptomText(rawFallback);
 
   // Use LLM-extracted title first, then generate from chief complaint, then heuristic
   const extractedTitle = typeof (extractedData as Record<string, unknown>).conversationTitle === "string"
     ? ((extractedData as Record<string, unknown>).conversationTitle as string).trim()
     : null;
-  if (extractedTitle && extractedTitle.length > 5 && !extractedTitle.toLowerCase().includes("having pain")) {
+  if (extractedTitle && extractedTitle.length > 5 && !extractedTitle.toLowerCase().includes("having pain") && !isFileUploadString(extractedTitle)) {
     conversationTitle = extractedTitle;
-  } else if (!conversationTitle || conversationTitle === "Aegis Clinical Assessment" || conversationTitle.includes("Having Pain")) {
+  } else if (!conversationTitle || conversationTitle === "Aegis Clinical Assessment" || conversationTitle.includes("Having Pain") || isFileUploadString(conversationTitle)) {
     const chiefComplaint = extractedData.symptoms?.primarySymptom ||
       (typeof (extractedData as Record<string, unknown>).consultationReason === "string"
         ? (extractedData as Record<string, unknown>).consultationReason as string : null);
     conversationTitle = generateConversationTitle(messages, chiefComplaint);
   }
 
-  const finalConsultationReason =
+  const finalConsultationReason = sanitizePatientSymptomText(
     extractedData.consultationReason ||
-    (fallbackText.slice(0, 150));
+    (fallbackText.slice(0, 150))
+  );
 
-  const finalSymptoms = extractedData.symptoms || {
-    primarySymptom: firstMeaningfulMessage ? firstMeaningfulMessage.content.slice(0, 100) : "Not specified",
-    associatedSymptoms: [],
-  };
+  const finalSymptoms = extractedData.symptoms
+    ? {
+        ...extractedData.symptoms,
+        primarySymptom: sanitizePatientSymptomText(extractedData.symptoms.primarySymptom),
+      }
+    : {
+        primarySymptom: sanitizePatientSymptomText(firstMeaningfulMessage ? firstMeaningfulMessage.content.slice(0, 100) : "Not specified"),
+        associatedSymptoms: [],
+      };
 
   const finalHistory = extractedData.history || {};
   const finalUnderstanding = extractedData.clinicalUnderstanding || {
@@ -731,15 +795,17 @@ ${fullText}
 
   let finalClinicalSnapshot = extractedClinicalSnapshot
     ? {
-        primaryConcern: String(extractedClinicalSnapshot.primaryConcern || finalConsultationReason),
+        primaryConcern: sanitizePatientSymptomText(String(extractedClinicalSnapshot.primaryConcern || finalConsultationReason)),
         durationSummary: extractedClinicalSnapshot.durationSummary as string | undefined,
         severitySummary: extractedClinicalSnapshot.severitySummary as string | undefined,
-        keyPositiveFindings: Array.isArray(extractedClinicalSnapshot.keyPositiveFindings)
-          ? extractedClinicalSnapshot.keyPositiveFindings as string[]
-          : [],
-        keyNegativeFindings: Array.isArray(extractedClinicalSnapshot.keyNegativeFindings)
-          ? extractedClinicalSnapshot.keyNegativeFindings as string[]
-          : [],
+        keyPositiveFindings: (Array.isArray(extractedClinicalSnapshot.keyPositiveFindings)
+          ? (extractedClinicalSnapshot.keyPositiveFindings as string[])
+          : []
+        ).map(sanitizePatientSymptomText),
+        keyNegativeFindings: (Array.isArray(extractedClinicalSnapshot.keyNegativeFindings)
+          ? (extractedClinicalSnapshot.keyNegativeFindings as string[])
+          : []
+        ).map(sanitizePatientSymptomText),
         urgencyStatement: String(extractedClinicalSnapshot.urgencyStatement || "Further evaluation recommended."),
         keyClinicalConsideration: extractedClinicalSnapshot.keyClinicalConsideration as string | undefined,
       }
@@ -747,13 +813,13 @@ ${fullText}
 
   if (!finalClinicalSnapshot) {
     finalClinicalSnapshot = {
-      primaryConcern: String(finalConsultationReason),
+      primaryConcern: sanitizePatientSymptomText(String(finalConsultationReason)),
       durationSummary: finalSymptoms.duration || (typeof finalCaseState?.duration === "string" ? finalCaseState.duration : undefined),
       severitySummary: finalSymptoms.severity || (typeof finalCaseState?.severity === "string" ? finalCaseState.severity : undefined),
       keyPositiveFindings: [
         finalSymptoms.primarySymptom,
         ...((finalSymptoms.associatedSymptoms && finalSymptoms.associatedSymptoms.length > 0) ? finalSymptoms.associatedSymptoms : caseSymptoms)
-      ].filter(Boolean),
+      ].map(sanitizePatientSymptomText).filter(Boolean),
       keyNegativeFindings: Array.isArray(extractedRaw.pertinentNegatives)
         ? (extractedRaw.pertinentNegatives as string[])
         : caseNegatives,
@@ -766,6 +832,20 @@ ${fullText}
         ? `Primary consideration is ${finalClinicalConsiderations[0].name}; requires licensed professional evaluation.`
         : "Clinical evaluation recommended to determine underlying etiology.",
     };
+  }
+
+  let cleanedDrNote = finalDrNote;
+  if (cleanedDrNote) {
+    cleanedDrNote = cleanedDrNote
+      .split("\n")
+      .map((line) => {
+        if (/^(?:CHIEF COMPLAINT|HISTORY OF PRESENTING COMPLAINT|CLINICAL HISTORY & PROGRESSION|HISTORY):\s*Uploaded photo/i.test(line)) {
+          const prefix = line.split(":")[0];
+          return `${prefix}: Physical health photograph submitted for clinical visual assessment.`;
+        }
+        return line;
+      })
+      .join("\n");
   }
 
   const resolvedPertinentNegatives = Array.isArray(extractedRaw.pertinentNegatives) && extractedRaw.pertinentNegatives.length > 0
@@ -794,7 +874,7 @@ ${fullText}
     symptoms: finalSymptoms,
     history: finalHistory,
     clinicalUnderstanding: finalUnderstanding,
-    drNote: finalDrNote,
+    drNote: cleanedDrNote,
     reportFindings: extractedData.reportFindings,
     guidance: finalGuidance,
     medicationDiscussion: medicationDiscussion.length > 0 ? medicationDiscussion : undefined,

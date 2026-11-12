@@ -246,6 +246,9 @@ export function DocumentGenerationModal({
         if (rawMsg.reportAnalysis) {
           cleanMsg.reportAnalysis = rawMsg.reportAnalysis;
         }
+        if (rawMsg.visualAnalysisSummary) {
+          cleanMsg.visualAnalysisSummary = rawMsg.visualAnalysisSummary;
+        }
         return cleanMsg;
       });
 

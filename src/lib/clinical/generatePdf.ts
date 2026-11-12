@@ -868,8 +868,11 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
     }
     sbarH += 4;
 
-    // Check overflow BEFORE starting SBAR
-    checkPageOverflow(Math.min(sbarH, 75));
+    // If SBAR note cannot fit cleanly on the current page, start it on a fresh page
+    if (y + sbarH > pageHeight - 24) {
+      doc.addPage();
+      y = margin + 14;
+    }
 
     drawSectionHeader(
       "Clinical Encounter Note & Handoff (SBAR)",
@@ -877,7 +880,7 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
       "HEALTHCARE PROVIDER BRIEFING"
     );
 
-    const handoffStartY = y;
+    let handoffStartY = y;
     doc.setFillColor(...C_SLATE_50);
     doc.setDrawColor(...C_SLATE_200);
     doc.setLineWidth(0.35);
@@ -896,15 +899,70 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
 
     if (parsedNote.sections.length > 0) {
       for (const sec of parsedNote.sections) {
+        // Pre-calculate height of this section
+        let secNeededH = 7;
+        let slLines: string[] = [];
+        const bulletsList: Array<{ marker: string; markerColor: readonly [number, number, number]; lines: string[] }> = [];
+
+        if (sec.category === "safety") {
+          slLines = doc.splitTextToSize(sec.content, contentWidth - 12);
+          secNeededH += slLines.length * 3.2 + 3;
+        } else if (sec.bullets && sec.bullets.length > 0) {
+          secNeededH += 4;
+          for (const b of sec.bullets) {
+            const marker =
+              sec.category === "positives"
+                ? "+"
+                : sec.category === "negatives"
+                ? "–"
+                : "•";
+            const markerColor: readonly [number, number, number] =
+              sec.category === "positives"
+                ? C_TEAL_600
+                : sec.category === "negatives"
+                ? C_SLATE_400
+                : C_SLATE_600;
+
+            const bl = doc.splitTextToSize(b, contentWidth - 16);
+            bulletsList.push({ marker, markerColor, lines: bl });
+            secNeededH += bl.length * 3.6 + 0.8;
+          }
+        } else {
+          slLines = doc.splitTextToSize(sec.content, contentWidth - 12);
+          secNeededH += slLines.length * 3.5 + 2;
+        }
+
+        // Section-level overflow guard
+        if (y + secNeededH > pageHeight - 20) {
+          // Close current page box
+          const boxH = y - handoffStartY + 2;
+          doc.setDrawColor(...C_SLATE_200);
+          doc.setLineWidth(0.35);
+          doc.roundedRect(margin, handoffStartY, contentWidth, boxH, 2, 2, "S");
+
+          doc.addPage();
+          y = margin + 14;
+          handoffStartY = y;
+
+          doc.setFontSize(7.2);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(...C_SLATE_500);
+          doc.text(
+            "STRUCTURED CLINICAL BRIEFING (CONTINUED)",
+            margin + 5,
+            y + 3.5
+          );
+          y += 7;
+        }
+
         if (sec.category === "safety") {
           // Safety Note: render as subtle verification notice
           y += 1.5;
           doc.setFont("helvetica", "italic");
           doc.setFontSize(6.8);
           doc.setTextColor(...C_SLATE_500);
-          const sl = doc.splitTextToSize(sec.content, contentWidth - 12);
-          doc.text(sl, margin + 5, y);
-          y += sl.length * 3.2 + 2.5;
+          doc.text(slLines, margin + 5, y);
+          y += slLines.length * 3.2 + 2.5;
           continue;
         }
 
@@ -921,38 +979,23 @@ export function generatePdfBlob(summary: NormalizedClinicalSummary): Blob {
         doc.text(sec.label.toUpperCase() + ":", margin + 5, y);
         y += 4;
 
-        if (sec.bullets && sec.bullets.length > 0) {
-          for (const b of sec.bullets) {
-            const marker =
-              sec.category === "positives"
-                ? "+"
-                : sec.category === "negatives"
-                ? "–"
-                : "•";
-            const markerColor: readonly [number, number, number] =
-              sec.category === "positives"
-                ? C_TEAL_600
-                : sec.category === "negatives"
-                ? C_SLATE_400
-                : C_SLATE_600;
-
-            const bl = doc.splitTextToSize(b, contentWidth - 16);
+        if (bulletsList.length > 0) {
+          for (const item of bulletsList) {
             doc.setFont("helvetica", "bold");
-            doc.setTextColor(...markerColor);
-            doc.text(marker, margin + 7, y);
+            doc.setTextColor(...item.markerColor);
+            doc.text(item.marker, margin + 7, y);
 
             doc.setFont("helvetica", "normal");
             doc.setTextColor(...C_SLATE_700);
-            doc.text(bl, margin + 11, y);
-            y += bl.length * 3.6 + 0.8;
+            doc.text(item.lines, margin + 11, y);
+            y += item.lines.length * 3.6 + 0.8;
           }
         } else {
           doc.setFont("helvetica", "normal");
           doc.setFontSize(7.8);
           doc.setTextColor(...C_SLATE_700);
-          const lines = doc.splitTextToSize(sec.content, contentWidth - 12);
-          doc.text(lines, margin + 5, y);
-          y += lines.length * 3.5 + 2;
+          doc.text(slLines, margin + 5, y);
+          y += slLines.length * 3.5 + 2;
         }
 
         y += 1;
