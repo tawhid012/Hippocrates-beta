@@ -86,3 +86,4 @@ export class WorkspaceErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+

@@ -134,14 +134,34 @@ export async function POST(request: Request) {
   const incomingList = body.attachments || (body.attachment ? [body.attachment] : []);
   const normalizedAttachments = incomingList
     .filter((a) => a && a.fileBase64)
-    .map((a) => ({
-      fileBase64: a.fileBase64 || "",
-      mimeType: a.mimeType || "application/octet-stream",
-      fileName: a.fileName || "Attachment",
-      fileSize: a.fileSize,
-      dataUrl: a.dataUrl,
-      attachmentType: a.attachmentType || body.attachmentType || (a.mimeType?.startsWith("image/") ? "medical_image" : "lab_report"),
-    }));
+    .map((a) => {
+      let resolvedMime = a.mimeType || "";
+      if (!resolvedMime || resolvedMime === "application/octet-stream") {
+        const lower = (a.fileName || "").toLowerCase();
+        if (lower.endsWith(".png")) resolvedMime = "image/png";
+        else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) resolvedMime = "image/jpeg";
+        else if (lower.endsWith(".webp")) resolvedMime = "image/webp";
+        else if (lower.endsWith(".pdf")) resolvedMime = "application/pdf";
+        else if (a.fileBase64?.startsWith("data:image/")) {
+          const match = a.fileBase64.match(/^data:([^;]+);base64,/);
+          if (match && match[1]) resolvedMime = match[1];
+        } else {
+          resolvedMime = "image/jpeg";
+        }
+      }
+
+      const isImg = resolvedMime.startsWith("image/");
+      const attachmentType = a.attachmentType || body.attachmentType || (isImg ? "medical_image" : "lab_report");
+
+      return {
+        fileBase64: a.fileBase64 || "",
+        mimeType: resolvedMime,
+        fileName: a.fileName || "Attachment",
+        fileSize: a.fileSize,
+        dataUrl: a.dataUrl,
+        attachmentType,
+      };
+    });
 
   if (!rawMessage && normalizedAttachments.length === 0) {
     return apiError("Please enter a health question or attach a file.", 400);

@@ -331,12 +331,20 @@ export async function* askAegisServiceStream(
       > = [];
 
       for (const img of attachments) {
-        if (img.fileBase64 && img.mimeType.startsWith("image/")) {
-          // Remove potential data URL header if present
-          const base64Data = img.fileBase64.replace(/^data:[^;]+;base64,/, "");
+        if (img.fileBase64 && (img.mimeType.startsWith("image/") || img.attachmentType === "medical_image")) {
+          // Remove potential data URL header if present and normalize MIME
+          let mime = img.mimeType || "image/jpeg";
+          const dataUrlMatch = img.fileBase64.match(/^data:([^;]+);base64,/);
+          if (dataUrlMatch && dataUrlMatch[1]) {
+            mime = dataUrlMatch[1];
+          }
+          if (!mime.startsWith("image/")) {
+            mime = "image/jpeg";
+          }
+          const base64Data = img.fileBase64.replace(/^data:[^;]+;base64,/, "").trim();
           parts.push({
             inlineData: {
-              mimeType: img.mimeType,
+              mimeType: mime,
               data: base64Data,
             },
           });
@@ -374,8 +382,9 @@ export async function* askAegisServiceStream(
       };
       return;
     } catch (error: unknown) {
+      const errStr = error instanceof Error ? error.message : String(error);
       throw new AegisServiceError(
-        "Aegis was unable to process the uploaded image. Please ensure good lighting and try again.",
+        `Aegis was unable to process the uploaded image (${errStr}). Please try again.`,
         error
       );
     }

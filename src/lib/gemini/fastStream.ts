@@ -38,8 +38,6 @@ export function isFatalProviderError(error: unknown): boolean {
     lower.includes("permission_denied") ||
     lower.includes("missing_gemini_api_key") ||
     lower.includes("billing_disabled") ||
-    lower.includes("invalid_argument") ||
-    (lower.includes("400") && !lower.includes("quota")) ||
     lower.includes("401") ||
     (lower.includes("403") && !lower.includes("quota"))
   );

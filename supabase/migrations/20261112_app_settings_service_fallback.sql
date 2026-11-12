@@ -36,3 +36,4 @@ CREATE POLICY "Service role full access on app_settings"
   TO service_role
   USING (true)
   WITH CHECK (true);
+
