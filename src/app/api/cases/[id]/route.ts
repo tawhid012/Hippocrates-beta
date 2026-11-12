@@ -39,7 +39,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const caseRecord = await getCase(id, undefined, sessionId, user?.id);
     if (!caseRecord) return apiError("Case not found.", 404);
 
-    await renameCase(id, body.title || "Untitled Case", sessionId, user?.id);
+    await renameCase(id, body.title || "Untitled Case", sessionId, user?.id, { isCustomTitle: true });
     return ok({ success: true });
   } catch {
     return apiError("Unable to rename case.", 500);

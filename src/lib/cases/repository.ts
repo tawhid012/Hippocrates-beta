@@ -460,18 +460,49 @@ export async function getCaseMetadataOnly(caseId: string, _ownerToken?: string):
   return undefined;
 }
 
-export async function renameCase(caseId: string, title: string, ownerToken?: string, userId?: string) {
+export async function renameCase(
+  caseId: string,
+  title: string,
+  ownerToken?: string,
+  userId?: string,
+  options?: { isCustomTitle?: boolean; titleGenerated?: boolean }
+) {
   const existing = await getCase(caseId, undefined, ownerToken, userId);
   if (!existing) {
     throw new Error("Case not found or unauthorized.");
   }
 
+  const currentMeta = (existing.metadata && typeof existing.metadata === "object"
+    ? existing.metadata
+    : {}) as Record<string, unknown>;
+
+  const isCustomUserEdit = options?.isCustomTitle ?? false;
+
+  // Protected: If the user manually edited this title, automated generators must NEVER overwrite it
+  if (!isCustomUserEdit && (currentMeta.is_custom_title === true || currentMeta.title_user_edited === true)) {
+    return existing;
+  }
+
   const newTitle = title.trim() || "Untitled Session";
+  const updatedMeta: Record<string, unknown> = {
+    ...currentMeta,
+    ...(isCustomUserEdit
+      ? { is_custom_title: true, title_user_edited: true, title_updated_at: new Date().toISOString() }
+      : options?.titleGenerated
+      ? { title_generated: true, title_generated_at: new Date().toISOString() }
+      : {}),
+  };
+
   const supabase = createSupabaseServiceClient();
   if (supabase) {
+    const updatePayload: { title: string; metadata?: Json } = { title: newTitle };
+    if (isCustomUserEdit || options?.titleGenerated) {
+      updatePayload.metadata = updatedMeta as Json;
+    }
+
     const { error } = await supabase
       .from("chat_sessions")
-      .update({ title: newTitle })
+      .update(updatePayload)
       .eq("id", caseId);
 
     if (error) {
@@ -483,8 +514,11 @@ export async function renameCase(caseId: string, title: string, ownerToken?: str
   const item = caseCache.get(caseId);
   if (item) {
     item.title = newTitle;
+    item.metadata = updatedMeta;
     item.updatedAt = new Date().toISOString();
   }
+
+  return { ...existing, title: newTitle, metadata: updatedMeta };
 }
 
 export async function updateCaseMetadata(

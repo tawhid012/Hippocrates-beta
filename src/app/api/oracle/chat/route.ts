@@ -4,19 +4,16 @@ import {
   addCaseMessage,
   createCase,
   getOracleHistory,
-  renameCase,
 } from "@/lib/cases/repository";
 import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/security/rateLimit";
+import {
+  triggerAsyncTitleGeneration,
+  deriveDeterministicFallbackTitle,
+} from "@/services/conversation/titleService";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-function deriveCaseTitle(message: string) {
-  const compact = message.replace(/\s+/g, " ").trim();
-  if (!compact) return "Clinical Case";
-  return compact.length > 54 ? `${compact.slice(0, 54)}…` : compact;
-}
 
 export async function POST(request: Request) {
   let body: {
@@ -47,7 +44,7 @@ export async function POST(request: Request) {
       return apiError("Too many clinical requests. Please wait a moment before sending another query.", 429);
     }
     const finalCaseId = caseIdStr || crypto.randomUUID();
-    const caseTitle = deriveCaseTitle(message);
+    const caseTitle = deriveDeterministicFallbackTitle(message);
 
     // Fast client-provided history skips DB I/O entirely; fallback to repository cache
     const historyPromise = body.history && Array.isArray(body.history)
@@ -74,9 +71,17 @@ export async function POST(request: Request) {
       const userMessage = await userMsgPromise;
       const assistantMessage = await addCaseMessage(finalCaseId, "assistant", reply, undefined, sessionId, user?.id);
 
-      if (isNewCase) {
-        void renameCase(finalCaseId, caseTitle, sessionId, user?.id);
-      }
+      // Trigger intelligent title generation asynchronously without blocking the response
+      void triggerAsyncTitleGeneration({
+        caseId: finalCaseId,
+        messages: [
+          ...history,
+          { role: "user", content: message },
+          { role: "assistant", content: reply },
+        ],
+        sessionId,
+        userId: user?.id,
+      });
 
       return ok({
         reply,
@@ -113,9 +118,17 @@ export async function POST(request: Request) {
           // Persist assistant message
           const assistantMessage = await addCaseMessage(finalCaseId, "assistant", fullReply, undefined, sessionId, user?.id);
 
-          if (isNewCase) {
-            void renameCase(finalCaseId, caseTitle, sessionId, user?.id);
-          }
+          // Trigger intelligent title generation asynchronously without blocking the response
+          void triggerAsyncTitleGeneration({
+            caseId: finalCaseId,
+            messages: [
+              ...history,
+              { role: "user", content: message },
+              { role: "assistant", content: fullReply },
+            ],
+            sessionId,
+            userId: user?.id,
+          });
 
           // Send done event with final metadata
           controller.enqueue(

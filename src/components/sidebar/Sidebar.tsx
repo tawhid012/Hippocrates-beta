@@ -133,7 +133,6 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(caseItem.title);
-  const [renameLoading, setRenameLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when rename mode activates
@@ -144,23 +143,18 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
     }
   }, [renaming, caseItem.title]);
 
-  const commitRename = async () => {
+  const commitRename = () => {
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === caseItem.title) {
       setRenaming(false);
       return;
     }
-    setRenameLoading(true);
-    try {
-      await onRename(trimmed);
-    } finally {
-      setRenameLoading(false);
-      setRenaming(false);
-    }
+    setRenaming(false);
+    void onRename(trimmed);
   };
 
   const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") void commitRename();
+    if (e.key === "Enter") commitRename();
     if (e.key === "Escape") setRenaming(false);
   };
 
@@ -228,26 +222,21 @@ function CaseItem({ caseItem, isActive, onSelect, onDelete, onRename }: CaseItem
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={handleRenameKeyDown}
-                  onBlur={() => void commitRename()}
+                  onBlur={() => commitRename()}
                   className="w-full min-w-0 bg-white/90 dark:bg-slate-800 text-[13px] font-medium text-foreground rounded-lg px-2 py-0.5 outline-none ring-2 ring-accent/50 focus:ring-accent transition shadow-sm"
-                  disabled={renameLoading}
                 />
-                {renameLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void commitRename()}
-                    className="shrink-0 text-accent hover:text-accent/80 p-0.5"
-                    title="Save"
-                  >
-                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => commitRename()}
+                  className="shrink-0 text-accent hover:text-accent/80 p-0.5 cursor-pointer"
+                  title="Save"
+                >
+                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                </button>
                 <button
                   type="button"
                   onClick={() => setRenaming(false)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground p-0.5"
+                  className="shrink-0 text-muted-foreground hover:text-foreground p-0.5 cursor-pointer"
                   title="Cancel"
                 >
                   <X className="h-3.5 w-3.5" strokeWidth={2} />
@@ -419,25 +408,21 @@ export function Sidebar({
             </p>
             <ScrollArea className="h-[calc(100%-1.75rem)] mt-2.5">
               <div className="space-y-1 pr-1">
-                {casesLoading && (
+                {casesLoading && cases.length === 0 ? (
                   <div className="px-1 py-1 space-y-2">
                     <div className="flex items-center gap-2 px-2 text-[11px] text-muted-foreground/70 font-medium">
                       <Loader2 className="h-3 w-3 animate-spin text-accent" strokeWidth={2} />
-                      <span>{isPatient ? "Syncing health history…" : "Loading case records…"}</span>
+                      <span>{isPatient ? "Loading conversations…" : "Loading case records…"}</span>
                     </div>
                     <CasesListSkeleton count={5} />
                   </div>
-                )}
-
-                {!casesLoading && cases.length === 0 && (
+                ) : cases.length === 0 ? (
                   <div className="rounded-[15px] px-3.5 py-3 text-[12px] leading-relaxed text-muted-foreground/65">
                     {isPatient
                       ? "No saved conversations yet. Ask Aegis a health question or upload a medical report to start."
                       : "No saved cases yet. Start a new case to save the conversation."}
                   </div>
-                )}
-
-                {!casesLoading &&
+                ) : (
                   cases.map((caseItem) => (
                     <CaseItem
                       key={caseItem.id}
@@ -453,7 +438,8 @@ export function Sidebar({
                       onDelete={() => void onDeleteCase(caseItem.id)}
                       onRename={(newTitle) => onRenameCase(caseItem.id, newTitle)}
                     />
-                  ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
           </div>

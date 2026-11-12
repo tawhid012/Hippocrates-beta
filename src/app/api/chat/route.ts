@@ -5,7 +5,6 @@ import {
   addCaseMessage,
   createCase,
   getOracleHistory,
-  renameCase,
   getCase,
   updateCaseMetadata,
 } from "@/lib/cases/repository";
@@ -19,16 +18,13 @@ import {
   type AegisCaseState,
 } from "@/services/aegis/aegisCaseState";
 import { getClientSessionId, getAuthenticatedUser } from "@/lib/auth/session";
+import {
+  triggerAsyncTitleGeneration,
+  deriveDeterministicFallbackTitle,
+} from "@/services/conversation/titleService";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-function deriveCaseTitle(message: string, fileName?: string) {
-  if (fileName) return `Report: ${fileName}`;
-  const compact = message.replace(/\s+/g, " ").trim();
-  if (!compact) return "Untitled Session";
-  return compact.length > 54 ? `${compact.slice(0, 54)}…` : compact;
-}
 
 export async function POST(request: Request) {
   let body: {
@@ -100,7 +96,7 @@ export async function POST(request: Request) {
             : []);
 
       if (!existingCase) {
-        await createCase(deriveCaseTitle(rawMessage, attachment?.fileName), "aegis", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
+        await createCase(deriveDeterministicFallbackTitle(rawMessage, attachment ? [attachment] : undefined), "aegis", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
       }
 
       // Load case state strictly scoped to this consultation — no cross-consultation carryover
@@ -153,9 +149,17 @@ export async function POST(request: Request) {
           user?.id
         );
 
-        if (isNewCase) {
-          await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName), sessionId, user?.id);
-        }
+        // Trigger intelligent title generation asynchronously
+        void triggerAsyncTitleGeneration({
+          caseId: finalCaseId,
+          messages: [
+            ...history,
+            { role: "user", content: rawMessage, attachment },
+            { role: "assistant", content: cleanReply },
+          ],
+          sessionId,
+          userId: user?.id,
+        });
 
         // Persist case state
         void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState), sessionId, user?.id).catch(() => {});
@@ -215,9 +219,17 @@ export async function POST(request: Request) {
               user?.id
             );
 
-            if (isNewCase) {
-              await renameCase(finalCaseId, deriveCaseTitle(rawMessage, attachment?.fileName), sessionId, user?.id).catch(() => {});
-            }
+            // Trigger intelligent title generation asynchronously
+            void triggerAsyncTitleGeneration({
+              caseId: finalCaseId,
+              messages: [
+                ...history,
+                { role: "user", content: rawMessage, attachment },
+                { role: "assistant", content: cleanStreamReply },
+              ],
+              sessionId,
+              userId: user?.id,
+            });
 
             // Persist updated case state
             void updateCaseMetadata(finalCaseId, buildCaseStateMetadataUpdate(currentCaseState), sessionId, user?.id).catch(() => {});
@@ -283,7 +295,7 @@ export async function POST(request: Request) {
         : (caseIdStr ? await getOracleHistory(caseIdStr, sessionId, user?.id) : []);
       const finalCaseId = caseIdStr || crypto.randomUUID();
       if (isNewCase) {
-        await createCase(deriveCaseTitle(rawMessage), "oracle", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
+        await createCase(deriveDeterministicFallbackTitle(rawMessage), "oracle", undefined, undefined, undefined, finalCaseId, sessionId, user?.id);
       }
 
       const userMsgPromise = addCaseMessage(finalCaseId, "user", rawMessage);
@@ -293,9 +305,16 @@ export async function POST(request: Request) {
         const userMessage = await userMsgPromise;
         const assistantMessage = await addCaseMessage(finalCaseId, "assistant", reply);
 
-        if (isNewCase) {
-          await renameCase(finalCaseId, deriveCaseTitle(rawMessage), sessionId, user?.id);
-        }
+        void triggerAsyncTitleGeneration({
+          caseId: finalCaseId,
+          messages: [
+            ...history,
+            { role: "user", content: rawMessage },
+            { role: "assistant", content: reply },
+          ],
+          sessionId,
+          userId: user?.id,
+        });
 
         return ok({
           reply,
@@ -327,9 +346,16 @@ export async function POST(request: Request) {
             const userMessage = await userMsgPromise;
             const assistantMessage = await addCaseMessage(finalCaseId, "assistant", fullReply);
 
-            if (isNewCase) {
-              await renameCase(finalCaseId, deriveCaseTitle(rawMessage), sessionId, user?.id).catch(() => {});
-            }
+            void triggerAsyncTitleGeneration({
+              caseId: finalCaseId,
+              messages: [
+                ...history,
+                { role: "user", content: rawMessage },
+                { role: "assistant", content: fullReply },
+              ],
+              sessionId,
+              userId: user?.id,
+            });
 
             controller.enqueue(
               encoder.encode(

@@ -3,7 +3,6 @@ import { askAegisService, askAegisServiceStream, AegisServiceError, stripInterna
 import {
   addCaseMessage,
   createCase,
-  renameCase,
   getCase,
   updateCaseMetadata,
 } from "@/lib/cases/repository";
@@ -19,52 +18,13 @@ import {
   validateCaseStateIsolation,
   type AegisCaseState,
 } from "@/services/aegis/aegisCaseState";
+import {
+  triggerAsyncTitleGeneration,
+  deriveDeterministicFallbackTitle,
+} from "@/services/conversation/titleService";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-function isGreetingMessage(message: string): boolean {
-  const clean = message.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
-  const greetingPhrases = ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you", "okay", "ok", "yes", "no", "sure", "bye", "goodbye"];
-  return clean === "" || greetingPhrases.includes(clean);
-}
-
-function isPlaceholderTitle(title: string): boolean {
-  const t = title.toLowerCase().trim();
-  const placeholders = [
-    "untitled session", "untitled case", "untitled", "new session", "patient conversation", 
-    "patient health query", "patient health discussion", "hello", "hi", "hey",
-    "good morning", "good afternoon", "good evening", "thanks", "thank you", "okay", "ok"
-  ];
-  return placeholders.includes(t) || t.length < 3;
-}
-
-function deriveClinicalCaseTitle(
-  state: AegisCaseState,
-  rawMessage: string,
-  fileName?: string
-): string {
-  if (fileName) {
-    return `Report: ${fileName}`;
-  }
-  if (state.location && state.chief_complaint) {
-    const locLower = state.location.toLowerCase();
-    const ccLower = state.chief_complaint.toLowerCase();
-    if (ccLower.includes(locLower)) {
-      return state.chief_complaint;
-    }
-    return `${state.location} ${state.chief_complaint}`;
-  }
-  if (state.chief_complaint) {
-    return state.chief_complaint;
-  }
-  if (state.location) {
-    return `${state.location} Health Concern`;
-  }
-  const compact = rawMessage.replace(/\s+/g, " ").trim();
-  if (!compact || isGreetingMessage(compact)) return "Patient Health Discussion";
-  return compact.length > 40 ? `${compact.slice(0, 37)}...` : compact;
-}
 
 /**
  * Deterministically persists the updated clinical case state to case metadata.
@@ -185,7 +145,6 @@ export async function POST(request: Request) {
       return apiError("Too many requests. Please wait a moment before sending another message.", 429);
     }
     const caseIdStr = typeof body.caseId === "string" && body.caseId ? body.caseId : null;
-    const isNewCase = !caseIdStr;
     const finalCaseId = caseIdStr || crypto.randomUUID();
 
     // Shared single case fetch for the request (memoized across init, metadata, and history)
@@ -216,23 +175,14 @@ export async function POST(request: Request) {
           : Promise.resolve([]));
     const firstAtt = normalizedAttachments[0];
 
-    let initialTitle = "Patient Health Discussion";
-    if (firstAtt?.fileName) {
-      initialTitle = `Report: ${firstAtt.fileName}`;
-    } else if (rawMessage && !isGreetingMessage(rawMessage)) {
-      const compact = rawMessage.replace(/\s+/g, " ").trim();
-      initialTitle = compact.length > 35 ? `${compact.slice(0, 32)}...` : compact;
-    }
+    const initialTitle = deriveDeterministicFallbackTitle(rawMessage, normalizedAttachments);
 
     // Ensure case session exists in Supabase
-    let caseTitle = initialTitle;
     const initCasePromise = (async () => {
       try {
         const existingCase = await existingCasePromise;
         if (!existingCase) {
           await createCase(initialTitle, "aegis", "aegis-core", "patient", undefined, finalCaseId, sessionId, user?.id);
-        } else {
-          caseTitle = existingCase.title;
         }
       } catch (err) {
         console.error("Non-critical background case init error:", err);
@@ -338,13 +288,17 @@ export async function POST(request: Request) {
         user?.id
       );
 
-      const clinicalTitle = deriveClinicalCaseTitle(currentCaseState, rawMessage, firstAtt?.fileName);
-      if (clinicalTitle && clinicalTitle !== "Patient Health Discussion" && (isNewCase || isPlaceholderTitle(caseTitle))) {
-        caseTitle = clinicalTitle;
-        await renameCase(finalCaseId, clinicalTitle, sessionId, user?.id).catch(() => {});
-      } else if (isNewCase) {
-        await renameCase(finalCaseId, caseTitle, sessionId, user?.id);
-      }
+      // Trigger intelligent title generation asynchronously without blocking the response
+      void triggerAsyncTitleGeneration({
+        caseId: finalCaseId,
+        messages: [
+          ...history,
+          { role: "user", content: rawMessage, attachment: firstAtt },
+          { role: "assistant", content: cleanReply },
+        ],
+        sessionId,
+        userId: user?.id,
+      });
 
       const statusGate = determineAssessmentStatusFromResponse(
         cleanReply,
@@ -450,13 +404,17 @@ export async function POST(request: Request) {
             user?.id
           );
 
-          const clinicalTitle = deriveClinicalCaseTitle(currentCaseState, rawMessage, firstAtt?.fileName);
-          if (clinicalTitle && clinicalTitle !== "Patient Health Discussion" && (isNewCase || isPlaceholderTitle(caseTitle))) {
-            caseTitle = clinicalTitle;
-            await renameCase(finalCaseId, clinicalTitle, sessionId, user?.id).catch(() => {});
-          } else if (isNewCase) {
-            await renameCase(finalCaseId, caseTitle, sessionId, user?.id).catch(() => {});
-          }
+          // Trigger intelligent title generation asynchronously without blocking the response
+          void triggerAsyncTitleGeneration({
+            caseId: finalCaseId,
+            messages: [
+              ...history,
+              { role: "user", content: rawMessage, attachment: firstAtt },
+              { role: "assistant", content: cleanStreamReply },
+            ],
+            sessionId,
+            userId: user?.id,
+          });
 
           const statusGate = determineAssessmentStatusFromResponse(
             cleanStreamReply,

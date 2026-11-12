@@ -18,6 +18,7 @@ const testSuites = [
   { name: "Aegis Production Latency & Clinical Safety Suite", cmd: "node", args: ["tests/clinical/test-latency-safety-regression.mjs"] },
   { name: "Lab Report Extraction & Multimodal Resilience Suite", cmd: "node", args: ["tests/clinical/test-lab-report-extraction.mjs"] },
   { name: "Master Aegis Core Clinical Report Generation Suite", cmd: "node", args: ["tests/clinical/test-clinical-summary-master.mjs"] },
+  { name: "Conversation UX & Intelligent Titles Suite", cmd: "node", args: ["tests/conversation/test-conversation-ux.mjs"] },
 ];
 
 console.log("================================================================================");
